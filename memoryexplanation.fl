@@ -1,0 +1,54 @@
+fun add(&x: int, y: int) {
+    x += y
+}
+
+fun consume(box: Box<int>) {
+    println("Inside box: $box")
+}
+
+fun consumeBorrow(&box: int) {
+    println("Inside box: $box")
+}
+
+fun consumeRc(rc: Rc<int>) {
+    println("Inside Rc: $rc")
+}
+
+fun consumeInt(hi: int) {
+    println("Inside Gc: $hi")
+}
+
+fun consumeIntAdd(&hi: int) {
+    hi += 5
+}
+
+fun main {
+    x := 10
+    // y := &x // error, cannot reference stack variable
+    add(x, 5)
+    y := x // copies, x is still valid
+
+    a := Box(10)
+    b := a // moves
+    // println(a) // error, b owns it
+    consume(b)
+    // println(b) // error, consume owns it
+
+    c := Box(10)
+    consumeBorrow(c)
+    println(c) // prints 10
+
+    d := Rc(10)
+    consumeRc(d) // prints 10
+    consumeInt(d) // prints 10
+    consumeIntAdd(d)
+    consumeInt(d) // prints 15
+    println(d) // prints 15
+
+    e := Gc(10)
+    consumeIntAdd(e)
+    consumeInt(e) // prints 15
+    consumeIntAdd(e)
+    consumeInt(e) // prints 20
+    println(e) // prints 20
+}

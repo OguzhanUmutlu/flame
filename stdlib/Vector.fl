@@ -1,0 +1,83 @@
+class Vec<T> {
+    size: int
+      private set // works as normal
+      public set() {}
+    capacity: int
+      private set
+    private data: Box<T[]> // by default it's Box<empty T[]> empty arrays are actually nullptrs internally, but are handled gracefully
+
+    init = default // defining so that it can be initialized with no arguments
+
+    reserve(r: int) {
+        if (capacity < r) {
+            capacity = r
+            data = Box<T[r]>(data)
+        }
+    }
+
+    push(&element: T) { // & so that it's fast
+        if (size + 1 > capacity) {
+            capacity *= 2
+            data = Box<T[capacity]>(data)
+        }
+        data[size++] = element
+    }
+
+    pop() {
+        if (size == 0) return null
+        return data[size--]
+    }
+
+    back() {
+        if (size == 0) return null
+        return data[size - 1]
+    }
+
+    indexOf(element: T) {
+        for (i in 0..size) {
+            if (data[i] == element) return i
+        }
+        return -1
+    }
+
+    find(search: (T) -> bool) {
+        for (i in 0..size) {
+            if (search(data[i])) return data[i]
+        }
+        return null
+    }
+
+    findIndexOf(search: (T) -> bool) {
+        for (i in 0..size) {
+            if (search(data[i])) return i
+        }
+        return -1
+    }
+
+    operator [](index: int) {
+        return data[index]
+    }
+
+    operator []=(index: int, value: T) {
+        data[index] = value
+    }
+
+    operator in(element: T) {
+        for (i in 0..size) {
+            if (data[i] == element) return true
+        }
+        return false
+    }
+
+    shrink() {
+        data.resize()
+    }
+
+    emplace_back(...args: Arguments<T.init>) {
+        if (size + 1 > capacity) {
+            capacity *= 2
+            data = Box<T[capacity]>(data)
+        }
+        data[size++] = T(...args)
+    }
+}
