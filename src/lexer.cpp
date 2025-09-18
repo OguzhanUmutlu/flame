@@ -1,14 +1,34 @@
 #include "lexer.hpp"
 
-#include <iostream>
+#include <cstring>
+
+using namespace Flame;
+
+constexpr char charOperators[] = {
+    '=', '+', '-', '*', '/', '%', '!', '<', '>', '&', '|', '^', '~'
+};
+const char* operators[] = {
+    "<<=", ">>=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=",
+    "==", "!=", "<=", ">=", "&&", "||", "++", "--", "<<", ">>"
+};
+constexpr char symbols[] = {
+    '(', ')', '{', '}', '[', ']', ',', ':', '.', '?'
+};
+const char* keywords[] = {
+    "if", "else", "while", "for", "return", "fun", "class",
+    "import", "var", "val", "break", "continue", "when", "try",
+    "catch", "finally", "throw"
+};
 
 int GetOperator(char c) {
-    for (int i = 0; i < std::size(charOperators); i++) if (c == charOperators[i]) return i;
+    int size = std::size(charOperators);
+    for (int i = 0; i < size; i++) if (c == charOperators[i]) return i;
     return -1;
 }
 
 int GetSymbol(char c) {
-    for (int i = 0; i < std::size(symbols); i++) if (c == symbols[i]) return i;
+    int size = std::size(symbols);
+    for (int i = 0; i < size; i++) if (c == symbols[i]) return i;
     return -1;
 }
 
@@ -16,19 +36,19 @@ bool IsIdentifierChar(char c) {
     return GetSymbol(c) == -1 && GetOperator(c) == -1 && !std::isspace(c);
 }
 
-Flame::Token::Type operator+(Flame::Token::Type lhs, int rhs) {
-    return static_cast<Flame::Token::Type>(static_cast<int>(lhs) + rhs);
-};
+TokenType operator+(TokenType lhs, int rhs) {
+    return static_cast<TokenType>(static_cast<int>(lhs) + rhs);
+}
 
-void Flame::Tokenize(const std::string& content, std::vector<Token>& tokens) {
-    int i = 0;
+void FileTokenizer::Tokenize() {
+    size_t i = 0;
     size_t fstrings = 0;
     while (i < content.size()) {
         char c = content[i];
 
         if (c == '\n' || c == ';') {
-            if (tokens.empty() || tokens.back().type != Token::Type::NewLine) {
-                tokens.emplace_back(Token::Type::NewLine, content.data() + i, 1);
+            if (tokens.empty() || tokens.back().type != TokenType::NewLine) {
+                tokens.emplace_back(TokenType::NewLine, content.data() + i, 1);
             }
             i++;
             continue;
@@ -63,7 +83,7 @@ void Flame::Tokenize(const std::string& content, std::vector<Token>& tokens) {
                 if (c2 == 'e' || c2 == 'E') {
                     i++;
                     if (i < content.size() || !std::isdigit(content[i])) {
-                        throw std::runtime_error("Expected a digit");
+                        ThrowError("Expected a digit", i);
                     }
                     while (i < content.size()) {
                         char c3 = content[i];
@@ -72,7 +92,7 @@ void Flame::Tokenize(const std::string& content, std::vector<Token>& tokens) {
                     }
                 }
             }
-            tokens.emplace_back(is_float ? Token::Type::Float : Token::Type::Integer,
+            tokens.emplace_back(is_float ? TokenType::Float : TokenType::Integer,
                                 content.data() + start, i - start);
             continue;
         }
@@ -94,15 +114,14 @@ void Flame::Tokenize(const std::string& content, std::vector<Token>& tokens) {
                         i++;
                         break;
                     }
-                    tokens.emplace_back(Token::Type::StringMiddle,
-                                        content.data() + start, i - start);
+                    tokens.emplace_back(TokenType::StringMiddle, content.data() + start, i - start);
                     size_t id_index = i;
                     while (i < content.size()) {
                         i++;
                         c2 = content[i];
                         if (!IsIdentifierChar(c2)) break;
                     }
-                    tokens.emplace_back(Token::Type::Identifier, content.data() + id_index, i - id_index);
+                    tokens.emplace_back(TokenType::Identifier, content.data() + id_index, i - id_index);
                     start = i;
                     continue;
                 }
@@ -112,20 +131,26 @@ void Flame::Tokenize(const std::string& content, std::vector<Token>& tokens) {
             }
             char c2 = content[i - 1];
             if (c2 == '"') {
-                tokens.emplace_back(Token::Type::StringEnd, content.data() + start, i - start);
+                tokens.emplace_back(TokenType::StringEnd, content.data() + start, i - start - 1);
             } else if (c2 == '{') {
-                tokens.emplace_back(Token::Type::StringMiddle, content.data() + start, i - start);
+                tokens.emplace_back(TokenType::StringMiddle, content.data() + start, i - start - 2);
                 fstrings++;
             } else {
-                throw std::runtime_error("Unterminated string literal");
+                ThrowError("Unterminated string literal", start);
             }
+            continue;
+        }
+
+        if (c == '-' && i + 1 < content.size() && content[i + 1] == '>') {
+            tokens.emplace_back(TokenType::SymbolArrow, content.data() + i, 2);
+            i += 2;
             continue;
         }
 
         int sym_index = GetSymbol(c);
 
         if (sym_index != -1) {
-            tokens.emplace_back(Token::Type::Symbols + sym_index, content.data() + i, 1);
+            tokens.emplace_back(TokenType::Symbols + sym_index, content.data() + i, 1);
             i++;
             continue;
         }
@@ -141,28 +166,29 @@ void Flame::Tokenize(const std::string& content, std::vector<Token>& tokens) {
 
         if (op_index != -1) {
             bool found = false;
-            for (int j = 0; j < std::size(operators); j++) {
+            int size = std::size(operators);
+            for (int j = 0; j < size; j++) {
                 const char* op = operators[j];
                 size_t len = strlen(op);
                 if (content.compare(i, len, op) == 0) {
-                    tokens.emplace_back(Token::Type::OperatorStrings + j, content.data() + i, len);
+                    tokens.emplace_back(TokenType::OperatorStrings + j, content.data() + i, len);
                     i += len;
                     found = true;
                     break;
                 }
             }
             if (!found) {
-                tokens.emplace_back(Token::Type::OperatorChars + op_index, content.data() + i, 1);
+                tokens.emplace_back(TokenType::OperatorChars + op_index, content.data() + i, 1);
                 i++;
             }
             continue;
         }
 
         if (c == '"') {
-            size_t start = i;
             bool slash = false;
             bool has_format = false;
             i++;
+            size_t start = i;
             while (i < content.size()) {
                 char c2 = content[i];
                 i++;
@@ -175,8 +201,8 @@ void Flame::Tokenize(const std::string& content, std::vector<Token>& tokens) {
                         i++;
                         break;
                     }
-                    tokens.emplace_back(has_format ? Token::Type::StringMiddle : Token::Type::StringStart,
-                                        content.data() + start, i - start);
+                    tokens.emplace_back(has_format ? TokenType::StringMiddle : TokenType::StringStart,
+                                        content.data() + start, i - start - 2);
                     has_format = true;
                     size_t id_index = i;
                     while (i < content.size()) {
@@ -184,7 +210,7 @@ void Flame::Tokenize(const std::string& content, std::vector<Token>& tokens) {
                         c2 = content[i];
                         if (!IsIdentifierChar(c2)) break;
                     }
-                    tokens.emplace_back(Token::Type::Identifier, content.data() + id_index, i - id_index);
+                    tokens.emplace_back(TokenType::Identifier, content.data() + id_index, i - id_index);
                     start = i;
                     continue;
                 }
@@ -195,18 +221,18 @@ void Flame::Tokenize(const std::string& content, std::vector<Token>& tokens) {
 
             char c2 = content[i - 1];
             if (!has_format && c2 == '"') {
-                tokens.emplace_back(Token::Type::String, content.data() + start, i - start);
+                tokens.emplace_back(TokenType::String, content.data() + start, i - start);
                 continue;
             }
 
             if (c2 == '{') {
-                tokens.emplace_back(has_format ? Token::Type::StringMiddle : Token::Type::StringStart,
-                                    content.data() + start, i - start);
+                tokens.emplace_back(has_format ? TokenType::StringMiddle : TokenType::StringStart,
+                                    content.data() + start, i - start - 2);
                 fstrings++;
             }
 
             if (i >= content.size()) {
-                throw std::runtime_error("Unterminated string literal");
+                ThrowError("Unterminated string literal", start);
             }
         }
 
@@ -220,75 +246,35 @@ void Flame::Tokenize(const std::string& content, std::vector<Token>& tokens) {
 
         size_t len = i - start;
         if (len == 4 && content.compare(start, 4, "true") == 0) {
-            tokens.emplace_back(Token::Type::Boolean, "true", 4);
+            tokens.emplace_back(TokenType::Boolean, "true", 4);
             continue;
         }
 
         if (len == 5 && content.compare(start, 5, "false") == 0) {
-            tokens.emplace_back(Token::Type::Boolean, "false", 5);
+            tokens.emplace_back(TokenType::Boolean, "false", 5);
             continue;
         }
 
         if (len > 0) {
             bool is_keyword = false;
-            for (int j = 0; j < std::size(keywords); j++) {
+            int size = std::size(keywords);
+
+            for (int j = 0; j < size; j++) {
                 const char* kw = keywords[j];
                 if (len == strlen(kw) && content.compare(start, len, kw) == 0) {
-                    tokens.emplace_back(Token::Type::Keywords + j, kw, len);
+                    tokens.emplace_back(TokenType::Keywords + j, kw, len);
                     is_keyword = true;
                     break;
                 }
             }
             if (!is_keyword) {
-                tokens.emplace_back(Token::Type::Identifier, content.data() + start, len);
+                tokens.emplace_back(TokenType::Identifier, content.data() + start, len);
             }
             continue;
         }
 
-        throw std::runtime_error("Unexpected character: " + std::string(1, c));
+        ThrowError("Unexpected character", i);
     }
 
     tokens.shrink_to_fit();
-}
-
-void Flame::DebugTokens(const std::vector<Token>& tokens) {
-    for (const auto& token : tokens) {
-        std::string type;
-        switch (token.type) {
-        case Token::Type::Identifier: type = "Identifier";
-            break;
-        case Token::Type::Integer: type = "Integer";
-            break;
-        case Token::Type::Float: type = "Float";
-            break;
-        case Token::Type::String: type = "String";
-            break;
-        case Token::Type::Boolean: type = "Boolean";
-            break;
-        case Token::Type::StringStart: type = "StringStart";
-            break;
-        case Token::Type::StringMiddle: type = "StringMiddle";
-            break;
-        case Token::Type::StringEnd: type = "StringEnd";
-            break;
-        case Token::Type::NewLine:
-            std::cout << "[NewLine]\n";
-            break;
-        default:
-            if (token.type >= Token::Type::Symbols) {
-                type = "Symbol";
-            } else if (token.type >= Token::Type::OperatorStrings) {
-                type = "OperatorString";
-            } else if (token.type >= Token::Type::OperatorChars) {
-                type = "OperatorChar";
-            } else if (token.type >= Token::Type::Keywords) {
-                type = "Keyword";
-            } else {
-                type = "Unknown";
-            }
-            break;
-        }
-
-        if (!type.empty()) std::cout << "[" << type << "] '" << token.value << "'\n";
-    }
 }

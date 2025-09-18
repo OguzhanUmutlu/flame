@@ -16,8 +16,9 @@ add_executable(flame src/main.cpp
         src/utils.cpp
         src/lexer.hpp
         src/utils.hpp
-        src/error.cpp
-        src/error.hpp
+        src/parser.hpp
+        src/parser.cpp
+        src/arena.hpp
 )
 
 target_include_directories(flame PRIVATE ${LLVM_INCLUDE_DIRS})
@@ -28,4 +29,8 @@ target_link_libraries(flame PRIVATE ${llvm_libs})
 
 if (NOT MSVC)
     target_link_libraries(flame PRIVATE m)
-endif()
+else ()
+    target_compile_options(flame PRIVATE /EHsc)
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /Zi /MDd")
+    set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG} /DEBUG")
+endif ()

@@ -2,7 +2,13 @@
 #include <ostream>
 
 #include "lexer.hpp"
+#include "parser.hpp"
 #include "utils.hpp"
+
+// todo: optimize compile time loops where if let's say there are 50 empty cases and 1 valid case just run that one instead of looping
+//     llvm might do this automatically but not sure
+
+using namespace Flame;
 
 int main(int argc, char* argv[]) {
     if (argc != 2) {
@@ -10,12 +16,20 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    std::string content;
-    Flame::GetFileContent(argv[1], content);
+    Arena arena{};
 
-    std::vector<Flame::Token> tokens;
-    Flame::Tokenize(content, tokens);
+    Tokenizer tokenizer;
 
-    Flame::DebugTokens(tokens);
+    tokenizer.Tokenize(argv[1]);
+
+    // for (const auto& tok : tokenizer.files.begin()->second.tokens) {
+    //     std::cout << tok << std::endl;
+    // }
+
+    auto parser = Parser(arena, tokenizer);
+    auto expr = parser.ParseExpr();
+
+    std::cout << expr << std::endl;
+
     return 0;
 }

@@ -15,17 +15,16 @@ var x: u32 = 10
 var x: u64 = 10
 var x: u128 = 10
 
-var x: llint<1024> = 10 // llvm signed integer of size 1024, any size works.
-var x: lluint<1024> = 10 // llvm unsigned integer of size 1024, any size works.
-var x: llint<5> = 14 // even allows non-powers of 2, and even ones smaller than 8
-var x: lluint<1> = 1 // either 0 or 1, acts like a boolean
+var x: _llint<1024> = 10 // llvm signed integer of size 1024, any size works.
+var x: _lluint<1024> = 10 // llvm unsigned integer of size 1024, any size works.
+var x: _llint<5> = 14 // even allows non-powers of 2, and even ones smaller than 8
+var x: _lluint<1> = 1 // either 0 or 1, acts like a boolean
 
-var x: SIMD<i32, 4> = (1, 2, 3, 4) // SIMD<iN | uN, SIZE> where N is a positive integer
+var x = SIMD<i32>(1, 2, 3, 4) // SIMD<iN | uN> where N is a positive integer
 
 var x = true // has type 'bool'
 
 var x = 'x' // has type 'char'
-
 
 var x = 10
 // if (x) { // errors, needs a boolean
@@ -42,11 +41,21 @@ fun otherFun<T : number>(a: T, b: T) {
     return a + b
 }
 
-in fun add<T : number>(a: T, b: T) {
-    return a + b
+class Complex {
+    init(val re: f64, val im: f64) {}
+
+    operator +(other: Complex): Complex {
+        return Complex(re + other.re, im + other.im)
+    }
+
+    operator *(other: number): Complex {
+        return Complex(re * other, im * other)
+    }
 }
 
-var x = 5 add 7 // works
+val i = Complex(0, 1)
+
+var x = 5 + 7*i
 
 class Vec2 {
     init(val x: f32, val y: f32) {}
@@ -76,56 +85,34 @@ fun std.hash(vec: Vec3) {
 
 var x = (1, 2)
 
-when (x) {
-    (1, 2) -> println(9)
-    (2, 3) -> println(7)
-    else -> println(5)
-}
-
-// you can also use if and when statements inside expressions
+// you can also use if statements inside expressions
 var y = if (x == (1, 2)) {
     println("hello world")
     5
 } else 10
 
-var z = when (x) {
-    (1, 2) -> {
-        println("hello world")
-        5
-    }
-    (2, 3) -> 7
-    else -> 9
-}
-
-for (x in 0..10) {
+for (x in 0:10) {
     println(x) // 0 1 2 3 4 5 6 7 8 9
 }
 
-for (x in 10) { // same as 0..10
+for (x in 10) { // same as 0:10
     println(x) // 0 1 2 3 4 5 6 7 8 9
 }
 
-for (x in (0..10).step(2)) {
+for (x in 0:10:2) { // step by 2
     println(x) // 0 2 4 6 8 10
 }
 
-for (x in -10) { // same as -10..0
+for (x in -10) { // same as -10:0
     println(x) // -10 -9 -8 -7 -6 -5 -4 -3 -2 -1
 }
 
 while (x != 0) x--
 do x-- while (x != 0)
 
-for! (x in 10) { // expands this to 10 println calls
-    println(x)
-}
+alias i1024 = _llint<1024>
 
-alias i1024 = llint<1024>
-
-class Duration with usize { // defines a default init(d: usize) that you can use like init(str: string) = init(str.toUInt())
-    // cannot have additional properties
-    // cannot extend other classes, other classes can extend it but will again be limited to the same functionality
-
+class Duration : usize {
     val inSeconds get() = this / 1000
     val inMinutes get() = this / 60000
     val inHours get() = this / 3600000
@@ -133,7 +120,7 @@ class Duration with usize { // defines a default init(d: usize) that you can use
 }
 
 interface IntAddable {
-  op +(x: int): int
+    operator +(x: int): int
 }
 
 fun doAdd(c: IntAddable, x: int) { // same as doAdd<T : IntAddable>(c: T, x: int)
@@ -157,3 +144,28 @@ fun addAsk(x: (int, int) -> int) {
 }
 
 five = addAsk { x, y -> x + y }
+
+fun doSomething(x: int = 10, y: int = 20) {
+  println(x + y)
+}
+
+doSomething(y: 30) // prints 40
+doSomething() // prints 30
+doSomething(5) // prints 25
+
+fun spreadArgs(x: int = 5, ...rest: int[]) {
+  println(x)
+  for (arg in rest) {
+    println(arg)
+  }
+}
+
+spreadArgs(1, 2, 3, 4) // prints 1 2 3 4
+
+fun keywordArgs(...rest: map<string, int>) {
+  for (key, value in rest) {
+    println(key + ": " + value)
+  }
+}
+
+keywordArgs(a: 1, b: 2, c: 3) // prints a: 1 b: 2 c: 3
