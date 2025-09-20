@@ -1,3 +1,16 @@
+import math
+import std
+
+import math.sqrt // imports as sqrt
+println(sqrt(16)) // 4
+import math as m // imports math lib as m
+println(m.sqrt(25)) // 5
+import std as * // special import, imports everything from std without needing to prefix with std.
+println(hash("hello")) // prints hash of "hello"
+
+import mymodule as * // imports everything from mymodule but not recursively.
+println(mysubmodule.hello()) // you have to still prefix with mysubmodule.
+
 var x = 10 // int by default, 16 or 32 bits in size
 var x: uint = 10 // unsigned integer, 16 or 32 bits in size
 var x: isize = 10 // signed word
@@ -42,7 +55,7 @@ fun otherFun<T : number>(a: T, b: T) {
 }
 
 class Complex {
-    init(val re: f64, val im: f64) {}
+    init(public val re: f64, public val im: f64) {}
 
     operator +(other: Complex): Complex {
         return Complex(re + other.re, im + other.im)
@@ -58,7 +71,7 @@ val i = Complex(0, 1)
 var x = 5 + 7*i
 
 class Vec2 {
-    init(val x: f32, val y: f32) {}
+    init(public val x: f32, public val y: f32) {}
 
     operator +(other: Vec2): Vec2 {
         return Vec2(x + other.x, y + other.y)
@@ -66,7 +79,7 @@ class Vec2 {
 }
 
 class Vec3 {
-    init(val x: f32, val y: f32, val z: f32) {}
+    init(public val x: f32, public val y: f32, public val z: f32) {}
 
     operator +(other: Vec3) {
         return Vec3(x + other.x, y + other.y, z + other.z)
@@ -77,6 +90,45 @@ class Vec3 {
         y += other.y
         z += other.z
     }
+}
+
+enum class SomeEnum {
+    A // defaults to indexing at 0
+    B // 1
+}
+
+enum class OtherEnum {
+    A = 5 // starts at 5
+    B // 6
+    C = 10 // can set manually
+    D // 11
+}
+
+enum class CharEnum {
+    A = 'a' // understands char values
+    B // 'b'
+    C // 'c'
+    D := 'y' // allows setting manually
+    E // 'e' // continues from last pattern
+}
+
+enum class StringEnum {
+    Hello = "Wello" // understands string values
+    World // "World"
+    Foo // "Foo"
+    Bar := "Baz" // allows setting manually
+    Qux // "Qux"
+}
+
+enum class LowerEnum {
+    Hello = "hello" // understands lowercase string values
+    World // "world"
+    Foo // "foo"
+    Bar := "baz" // allows setting manually
+    Qux // "qux"
+    Plugh = "Plugh" // allows switching rules mid-enum
+    Xyzzy // "Xyzzy"
+    Thud // "Thud"
 }
 
 fun std.hash(vec: Vec3) {
@@ -113,10 +165,18 @@ do x-- while (x != 0)
 alias i1024 = _llint<1024>
 
 class Duration : usize {
-    val inSeconds get() = this / 1000
-    val inMinutes get() = this / 60000
-    val inHours get() = this / 3600000
-    val inDays get() = this / 86400000
+    fun get inSeconds() = this / 1000
+    fun get inMinutes() = this / 60000
+    fun get inHours() = this / 3600000
+    fun get inDays() = this / 86400000
+}
+
+fun get hello() {
+    return 5
+}
+
+fun get Duration.days() {
+    return this / 86400000
 }
 
 interface IntAddable {
@@ -131,19 +191,19 @@ fun run(x: () -> void) {
   x()
 }
 
-run({
+run(() -> {
   println("hi")
 })
 
-run {
+run(() -> {
   println("hi")
-}
+})
 
 fun addAsk(x: (int, int) -> int) {
   return x(2, 3)
 }
 
-five = addAsk { x, y -> x + y }
+five = addAsk(() -> { x, y -> x + y })
 
 fun doSomething(x: int = 10, y: int = 20) {
   println(x + y)
@@ -161,8 +221,10 @@ fun spreadArgs(x: int = 5, ...rest: int[]) {
 }
 
 spreadArgs(1, 2, 3, 4) // prints 1 2 3 4
+val arr = [1, 2, 3, 4] // defaults to int[]
+spreadArgs(...arr)
 
-fun keywordArgs(...rest: map<string, int>) {
+fun keywordArgs(...rest: (string, int)[]) {
   for (key, value in rest) {
     println(key + ": " + value)
   }

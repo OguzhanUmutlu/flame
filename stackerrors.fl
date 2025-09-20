@@ -1,0 +1,41 @@
+fun test(): &int {
+  return 1 // error
+}
+
+
+fun test(): &int {
+  var a = 10
+  return a // error
+}
+
+
+fun test(a: &int) {
+  return a
+}
+test(10) // error, passing a temporary
+var a = 10
+test(a) // ok
+
+
+var a: &int
+{
+  var b = 10
+  a = b // error, b does not live long enough
+}
+
+
+class S1 {
+  a: &int
+}
+
+class S2 {
+  init(val s1: &S1) {}
+}
+
+var s1 = S1()
+var s2 = S2(s1)
+{
+  var b = 10
+  s2.s1.a = b // error, b does not live as long as s1
+}
+

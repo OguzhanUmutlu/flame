@@ -17,8 +17,23 @@ constexpr char symbols[] = {
 const char* keywords[] = {
     "if", "else", "while", "for", "return", "fun", "class",
     "import", "var", "val", "break", "continue", "when", "try",
-    "catch", "finally", "throw"
+    "catch", "finally", "throw", "get", "set", "default", "delete",
+    "in", "as", "do", "alias", "enum"
 };
+
+std::string Flame::GetTokenValue(TokenType type) {
+    if (type <= TokenType::NewLine) return GetTokenTypeName(type);
+    if (type >= TokenType::Keywords && type < TokenType::OperatorChars) {
+        return keywords[static_cast<int>(type) - static_cast<int>(TokenType::Keywords)];
+    }
+    if (type >= TokenType::OperatorChars && type < TokenType::OperatorStrings) {
+        return std::string{charOperators[static_cast<int>(type) - static_cast<int>(TokenType::OperatorChars)]};
+    }
+    if (type >= TokenType::OperatorStrings && type < TokenType::Symbols) {
+        return operators[static_cast<int>(type) - static_cast<int>(TokenType::OperatorStrings)];
+    }
+    return std::string{symbols[static_cast<int>(type) - static_cast<int>(TokenType::Symbols)]};
+}
 
 int GetOperator(char c) {
     int size = std::size(charOperators);
@@ -27,7 +42,7 @@ int GetOperator(char c) {
 }
 
 int GetSymbol(char c) {
-    int size = std::size(symbols);
+    constexpr int size = std::size(symbols);
     for (int i = 0; i < size; i++) if (c == symbols[i]) return i;
     return -1;
 }
@@ -41,6 +56,10 @@ TokenType operator+(TokenType lhs, int rhs) {
 }
 
 void FileTokenizer::Tokenize() {
+    auto addToken = [&](TokenType type, size_t start, size_t length) {
+        tokens.emplace_back(type, content.data() + start, length);
+    };
+
     size_t i = 0;
     size_t fstrings = 0;
     while (i < content.size()) {
@@ -48,7 +67,7 @@ void FileTokenizer::Tokenize() {
 
         if (c == '\n' || c == ';') {
             if (tokens.empty() || tokens.back().type != TokenType::NewLine) {
-                tokens.emplace_back(TokenType::NewLine, content.data() + i, 1);
+                addToken(TokenType::NewLine, i, 1);
             }
             i++;
             continue;
@@ -92,8 +111,7 @@ void FileTokenizer::Tokenize() {
                     }
                 }
             }
-            tokens.emplace_back(is_float ? TokenType::Float : TokenType::Integer,
-                                content.data() + start, i - start);
+            addToken(is_float ? TokenType::Float : TokenType::Integer, start, i - start);
             continue;
         }
 
@@ -114,14 +132,14 @@ void FileTokenizer::Tokenize() {
                         i++;
                         break;
                     }
-                    tokens.emplace_back(TokenType::StringMiddle, content.data() + start, i - start);
+                    addToken(TokenType::StringMiddle, start, i - start);
                     size_t id_index = i;
                     while (i < content.size()) {
                         i++;
                         c2 = content[i];
                         if (!IsIdentifierChar(c2)) break;
                     }
-                    tokens.emplace_back(TokenType::Identifier, content.data() + id_index, i - id_index);
+                    addToken(TokenType::Identifier, id_index, i - id_index);
                     start = i;
                     continue;
                 }
@@ -131,9 +149,9 @@ void FileTokenizer::Tokenize() {
             }
             char c2 = content[i - 1];
             if (c2 == '"') {
-                tokens.emplace_back(TokenType::StringEnd, content.data() + start, i - start - 1);
+                addToken(TokenType::StringEnd, start, i - start - 1);
             } else if (c2 == '{') {
-                tokens.emplace_back(TokenType::StringMiddle, content.data() + start, i - start - 2);
+                addToken(TokenType::StringMiddle, start, i - start - 2);
                 fstrings++;
             } else {
                 ThrowError("Unterminated string literal", start);
@@ -141,8 +159,14 @@ void FileTokenizer::Tokenize() {
             continue;
         }
 
+        if (c == '.' && i + 2 < content.size() && content[i + 1] == '.' && content[i + 2] == '.') {
+            addToken(TokenType::SymbolEllipsis, i, 3);
+            i += 3;
+            continue;
+        }
+
         if (c == '-' && i + 1 < content.size() && content[i + 1] == '>') {
-            tokens.emplace_back(TokenType::SymbolArrow, content.data() + i, 2);
+            addToken(TokenType::SymbolArrow, i, 2);
             i += 2;
             continue;
         }
@@ -150,7 +174,7 @@ void FileTokenizer::Tokenize() {
         int sym_index = GetSymbol(c);
 
         if (sym_index != -1) {
-            tokens.emplace_back(TokenType::Symbols + sym_index, content.data() + i, 1);
+            addToken(TokenType::Symbols + sym_index, i, 1);
             i++;
             continue;
         }
@@ -171,14 +195,14 @@ void FileTokenizer::Tokenize() {
                 const char* op = operators[j];
                 size_t len = strlen(op);
                 if (content.compare(i, len, op) == 0) {
-                    tokens.emplace_back(TokenType::OperatorStrings + j, content.data() + i, len);
+                    addToken(TokenType::OperatorStrings + j, i, len);
                     i += len;
                     found = true;
                     break;
                 }
             }
             if (!found) {
-                tokens.emplace_back(TokenType::OperatorChars + op_index, content.data() + i, 1);
+                addToken(TokenType::OperatorChars + op_index, i, 1);
                 i++;
             }
             continue;
@@ -201,8 +225,7 @@ void FileTokenizer::Tokenize() {
                         i++;
                         break;
                     }
-                    tokens.emplace_back(has_format ? TokenType::StringMiddle : TokenType::StringStart,
-                                        content.data() + start, i - start - 2);
+                    addToken(has_format ? TokenType::StringMiddle : TokenType::StringStart, start, i - start - 2);
                     has_format = true;
                     size_t id_index = i;
                     while (i < content.size()) {
@@ -210,7 +233,7 @@ void FileTokenizer::Tokenize() {
                         c2 = content[i];
                         if (!IsIdentifierChar(c2)) break;
                     }
-                    tokens.emplace_back(TokenType::Identifier, content.data() + id_index, i - id_index);
+                    addToken(TokenType::Identifier, id_index, i - id_index);
                     start = i;
                     continue;
                 }
@@ -221,13 +244,12 @@ void FileTokenizer::Tokenize() {
 
             char c2 = content[i - 1];
             if (!has_format && c2 == '"') {
-                tokens.emplace_back(TokenType::String, content.data() + start, i - start);
+                addToken(TokenType::String, start, i - start - 1);
                 continue;
             }
 
             if (c2 == '{') {
-                tokens.emplace_back(has_format ? TokenType::StringMiddle : TokenType::StringStart,
-                                    content.data() + start, i - start - 2);
+                addToken(has_format ? TokenType::StringMiddle : TokenType::StringStart, start, i - start - 2);
                 fstrings++;
             }
 
@@ -246,12 +268,12 @@ void FileTokenizer::Tokenize() {
 
         size_t len = i - start;
         if (len == 4 && content.compare(start, 4, "true") == 0) {
-            tokens.emplace_back(TokenType::Boolean, "true", 4);
+            addToken(TokenType::Boolean, start, 4);
             continue;
         }
 
         if (len == 5 && content.compare(start, 5, "false") == 0) {
-            tokens.emplace_back(TokenType::Boolean, "false", 5);
+            addToken(TokenType::Boolean, start, 5);
             continue;
         }
 
@@ -262,13 +284,13 @@ void FileTokenizer::Tokenize() {
             for (int j = 0; j < size; j++) {
                 const char* kw = keywords[j];
                 if (len == strlen(kw) && content.compare(start, len, kw) == 0) {
-                    tokens.emplace_back(TokenType::Keywords + j, kw, len);
+                    addToken(TokenType::Keywords + j, start, len);
                     is_keyword = true;
                     break;
                 }
             }
             if (!is_keyword) {
-                tokens.emplace_back(TokenType::Identifier, content.data() + start, len);
+                addToken(TokenType::Identifier, start, len);
             }
             continue;
         }

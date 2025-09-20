@@ -15,22 +15,10 @@ Token = IdentifierToken
       | SetOperatorToken
       | SymbolToken
 
-Expr = VariableSetExpr
-     | CallExpr
-     | UnaryExpr
-     | BinaryExpr
-     | LiteralExpr
-     | FStringExpr
-     | PropertyExpr
-     | IndexExpr
-     | TupleExpr
-     | IfExpr
-     | RangeExpr
-     | ScopeExpr
-     | LambdaExpr
+CallArgument = CallArgument(spread: bool, name: IdentifierToken | NoneNode, value: Expr)
 
 VariableIncDecExpr(type: ++x --x x++ x--, id: VariableExpr | PropertyExpr)
-CallExpr(callee: Expr, args: Expr[], typeArgs: TypeExpr[])
+CallExpr(callee: Expr, args: CallArgument[], typeArgs: TypeExpr[])
 UnaryExpr(operator: OperatorToken, right: Expr)
 BinaryExpr(left: Expr, operator: OperatorToken, right: Expr)
 LiteralExpr(
@@ -51,85 +39,45 @@ PropertyExpr(callee: Expr, id: IdentifierToken)
 IndexExpr(callee: Expr, index: Expr)
 TupleExpr(elements: Expr[])
 IfExpr(
-    conditions: Expr[],
-    bodies: Stmt[][],
+    condition: Expr[],
+    body: Stmt[],
     else: Stmt[]
 )
 RangeExpr(start: Expr, end: Expr | NoneNode, step: Expr | NoneNode)
-ScopeExpr(body: Stmt[])
 LambdaExpr(
     params: Parameter[],
     returnType: TypeExpr | NoneNode,
     body: Stmt[]
 )
-
-TypeExpr =
-    IdentifierTypeExpr |
-    ArrayTypeExpr |
-    OptionalTypeExpr |
-    FunctionTypeExpr
+ScopeExpr(body: Stmt[])
 
 IdentifierTypeExpr(id: IdentifierToken, arguments: TypeExpr[])
 ArrayTypeExpr(elementType: TypeExpr, size: Expr | NoneNode)
 OptionalTypeExpr(type: TypeExpr)
 FunctionTypeExpr(params: TypeExpr[], returnType: TypeExpr | NoneNode)
 
-Parameter(ref: bool, id: IdentifierToken, type: TypeExpr | NoneNode)
+Parameter(ref: bool, id: IdentifierToken, type: TypeExpr | NoneNode, default: Expr | NoneNode)
 Generic(id: IdentifierToken, constraint: TypeExpr | NoneNode)
+EnumMember(manual: bool, id: IdentifierToken, value: Expr | NoneNode)
 PropVisibilityFlags = 1 | 2 | 4 // public, protected, private
-AccessGetFunction(
-    visibility: PropVisibility,
-    returnType: TypeExpr | NoneNode,
-    body: Stmt[]
-)
-AccessSetFunction(
-    visibility: PropVisibility,
-    body: Stmt[]
-)
 
 ReturnStmt(value: Expr | NoneNode)
 BreakStmt()
 ContinueStmt()
 ExpressionStmt(expression: Expr)
+ImportStmt(module: VariableExpr | PropertyExpr, alias: IdentifierToken | NoneNode)
+AliasStmt(id: IdentifierToken, type: TypeExpr)
 VariableDefineStmt(
     constant: bool,
     id: VariableExpr | PropertyExpr,
     type: TypeExpr | NoneNode,
     value: Expr
 )
-VariableAccessDefineStmt(
-    constant: bool,
-    id: VariableExpr | PropertyExpr,
-    type: TypeExpr | NoneNode,
-    get: AccessGetFunction[],
-    set: AccessSetFunction[]
-)
 ForStmt(
-    id: IdentifierToken,
+    identifiers: IdentifierToken[],
     iterable: Expr,
     body: Stmt[],
     elseBody: Stmt[]
-)
-FunctionStmt(
-    modifiers: PropVisibility,
-    id: VariableExpr | PropertyExpr,
-    generics: Generic[],
-    params: Parameter[],
-    returnType: TypeExpr | NoneNode,
-    body: Stmt[]
-)
-BinaryOpFunctionStmt(
-    visibility: PropVisibility,
-    id: VariableExpr | PropertyExpr,
-    param: Parameter,
-    returnType: TypeExpr | NoneNode,
-    body: Stmt[]
-)
-UnaryOpFunctionStmt(
-    visibility: PropVisibility,
-    id: VariableExpr | PropertyExpr,
-    returnType: TypeExpr | NoneNode,
-    body: Stmt[]
 )
 WhileStmt(
     condition: Expr,
@@ -141,22 +89,54 @@ DoWhileStmt(
     body: Stmt[],
     elseBody: Stmt[]
 )
-AliasStmt(
-    id: IdentifierToken,
-    type: TypeExpr
+FunctionStmt(
+    visibility: PropVisibility,
+    id: VariableExpr | PropertyExpr,
+    generics: Generic[],
+    params: Parameter[],
+    returnType: TypeExpr | NoneNode,
+    body: Stmt[]
+)
+BinaryOpFunctionStmt(
+    visibility: PropVisibility,
+    id: VariableExpr | PropertyExpr,
+    params: Parameter[],
+    returnType: TypeExpr | NoneNode,
+    body: Stmt[]
+)
+UnaryOpFunctionStmt(
+    visibility: PropVisibility,
+    id: VariableExpr | PropertyExpr,
+    param: Parameter?,
+    returnType: TypeExpr | NoneNode,
+    body: Stmt[]
+)
+GetFunctionStmt(
+    visibility: PropVisibility,
+    id: VariableExpr | PropertyExpr,
+    param: Parameter?,
+    returnType: TypeExpr | NoneNode,
+    body: Stmt[]
+)
+SetFunctionStmt(
+    visibility: PropVisibility,
+    id: VariableExpr | PropertyExpr,
+    params: Parameter[],
+    body: Stmt[]
 )
 ClassStmt(
-    id: IdentifierToken,
+    enum: bool,
+    id: VariableExpr | PropertyExpr,
     generics: Generic[],
     superClass: VariableExpr | PropertyExpr | NoneNode,
     properties: VariableDefineStmt[],
-    accessors: VariableAccessDefineStmt[],
+    getters: GetFunctionStmt[],
+    setters: SetFunctionStmt[],
     methods: FunctionStmt[],
     staticMethods: FunctionStmt[],
     constructor: FunctionStmt | NoneNode,
     binaryOperators: BinaryOpFunctionStmt[],
-    unaryOperators: UnaryOpFunctionStmt[]
+    unaryOperators: UnaryOpFunctionStmt[],
+    enumMembers: EnumMember[]
 )
-ImportStmt(module: VariableExpr | PropertyExpr, alias: IdentifierToken | NoneNode)
-Program(stmts: Stmt[])
 ```

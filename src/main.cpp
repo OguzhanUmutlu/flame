@@ -27,9 +27,11 @@ int main(int argc, char* argv[]) {
     // }
 
     auto parser = Parser(arena, tokenizer);
-    auto expr = parser.ParseExpr();
+    std::vector<ASTNode> statements;
 
-    std::cout << expr << std::endl;
+    parser.ParseStatements(statements);
+
+    std::cout << statements << std::endl;
 
     return 0;
 }

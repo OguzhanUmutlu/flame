@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <charconv>
 #include <iostream>
+#include <process.h>
 #include <ranges>
 #include <stdexcept>
 #include <string>
@@ -29,7 +30,8 @@ namespace Flame {
         Keywords,
         KeywordIf = Keywords, KeywordElse, KeywordWhile, KeywordFor, KeywordReturn, KeywordFun, KeywordClass,
         KeywordImport, KeywordVar, KeywordVal, KeywordBreak, KeywordContinue, KeywordWhen, KeywordTry, KeywordCatch,
-        KeywordFinally, KeywordThrow,
+        KeywordFinally, KeywordThrow, KeywordGet, KeywordSet, KeywordDefault, KeywordDelete, KeywordIn, KeywordAs,
+        KeywordDo, KeywordAlias, KeywordEnum,
 
         OperatorChars, Operator = OperatorChars,
         OperatorAssign          = OperatorChars, OperatorAdd, OperatorSub, OperatorMul, OperatorDiv, OperatorMod,
@@ -42,10 +44,27 @@ namespace Flame {
         OperatorEq, OperatorNeq, OperatorLte, OperatorGte, OperatorAnd, OperatorOr, OperatorInc, OperatorDec,
         OperatorShl, OperatorShr,
 
-        Symbols, Symbol = Symbols,
-        SymbolLeftPar   = Symbols, SymbolRightPar, SymbolLeftBrace, SymbolRightBrace, SymbolLeftBracket,
-        SymbolRightBracket, SymbolComma, SymbolColon, SymbolDot, SymbolQuestion, SymbolArrow
+        Symbols, Symbol       = Symbols,
+        SymbolLeftParenthesis = Symbols, SymbolRightParenthesis, SymbolLeftBrace, SymbolRightBrace, SymbolLeftBracket,
+        SymbolRightBracket, SymbolComma, SymbolColon, SymbolDot, SymbolQuestion, SymbolArrow, SymbolEllipsis
     };
+
+    static std::string GetTokenTypeName(TokenType type) {
+        if (type == TokenType::EndOfFile) return "EndOfFile";
+        if (type == TokenType::Identifier) return "Identifier";
+        if (type == TokenType::Integer) return "Integer";
+        if (type == TokenType::Float) return "Float";
+        if (type == TokenType::String || type == TokenType::StringStart || type == TokenType::StringMiddle || type ==
+            TokenType::StringEnd)
+            return "String";
+        if (type == TokenType::Boolean) return "Boolean";
+        if (type == TokenType::NewLine) return "NewLine";
+        if (type < TokenType::OperatorChars) return "Keyword";
+        if (type < TokenType::Symbols) return "Operator";
+        return "Symbol";
+    }
+
+    std::string GetTokenValue(TokenType type);
 
     enum class OperatorType {
         Assign = static_cast<int>(TokenType::OperatorAssign), Add, Sub, Mul, Div, Mod,
@@ -59,7 +78,7 @@ namespace Flame {
     };
 
     enum class SymbolType {
-        LeftPar = static_cast<int>(TokenType::SymbolLeftPar), RightPar, LeftBrace, RightBrace, LeftBracket,
+        LeftPar = static_cast<int>(TokenType::SymbolLeftParenthesis), RightPar, LeftBrace, RightBrace, LeftBracket,
         RightBracket, Comma, Semicolon, Colon, Dot, Question, Arrow
     };
 
@@ -358,7 +377,7 @@ namespace Flame {
                 os << '\'' << token.value << '\'';
                 return os;
             }
-            std::string typeName;
+            const char* typeName;
             switch (token.type) {
             case TokenType::Identifier: typeName = "Identifier";
                 break;
@@ -394,7 +413,7 @@ namespace Flame {
                 break;
             }
 
-            if (!typeName.empty()) os << "Token(type=" << typeName << ", value='" << token.value << "')";
+            os << "Token(type=" << typeName << ", value='" << token.value << "')";
             return os;
         }
     };
@@ -409,10 +428,10 @@ namespace Flame {
     using StringEndToken = TokenComp<TokenType::StringEnd>;
     using NewLineToken = TokenComp<TokenType::NewLine>;
 
-    const std::string RED = "\033[31m";
-    const std::string YELLOW = "\033[33m";
-    const std::string BOLD = "\033[1m";
-    const std::string RESET = "\033[0m";
+    constexpr auto RED = "\033[31m";
+    constexpr auto YELLOW = "\033[33m";
+    constexpr auto BOLD = "\033[1m";
+    constexpr auto RESET = "\033[0m";
 
     struct FileTokenizer {
         std::string filepath;
@@ -421,11 +440,7 @@ namespace Flame {
 
         void Tokenize();
 
-        [[noreturn]] void ThrowError(
-            const std::string& message,
-            size_t start,
-            size_t length = 1
-        ) const {
+        [[noreturn]] void ThrowError(const std::string& message, size_t start, size_t length = 1) const {
             if (content[start] == '\n' && start + 1 < content.size()) {
                 ++start;
             }
@@ -439,12 +454,12 @@ namespace Flame {
                 if (content[i] == '\n') lineNumber++;
             }
 
-            std::vector<std::string> lines;
+            std::vector<std::string_view> lines;
             size_t pos = 0;
             while (pos < content.size()) {
                 size_t next = content.find('\n', pos);
                 if (next == std::string::npos) next = content.size();
-                lines.push_back(content.substr(pos, next - pos));
+                lines.emplace_back(content.data() + pos, next - pos);
                 pos = next + 1;
             }
 
@@ -471,13 +486,12 @@ namespace Flame {
 
             std::cerr << "\n" << RED << filepath << ": " << message << std::endl;
 
-            throw std::runtime_error("test");
+            //throw std::runtime_error("test");
             exit(1);
         }
 
         [[noreturn]] void ThrowError(const std::string& message, const std::string_view& view) const {
-            size_t offset = view.data() - content.data();
-            ThrowError(message, offset, view.size());
+            ThrowError(message, view.data() - content.data(), view.size());
         }
 
         [[noreturn]] void ThrowError(const std::string& message, const TokenImpl& token) const {

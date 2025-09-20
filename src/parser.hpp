@@ -11,13 +11,14 @@ namespace Flame {
     enum class ASTNodeKind : uint8_t {
         NONE,
         VariableExpr, PropertyExpr, VariableIncDecExpr, CallExpr, UnaryExpr, BinaryExpr, LiteralExpr,
-        FStringExpr, IndexExpr, TupleExpr, IfExpr, RangeExpr, ScopeExpr, LambdaExpr,
+        FStringExpr, IndexExpr, TupleExpr, IfExpr, RangeExpr, LambdaExpr, ScopeExpr,
 
-        IdentifierTypeExpr, ArrayTypeExpr, OptionalTypeExpr, FunctionTypeExpr,
+        IdentifierTypeExpr, ArrayTypeExpr, OptionalTypeExpr, FunctionTypeExpr, ReferenceTypeExpr,
 
-        ScopeStmt, ReturnStmt, BreakStmt, ContinueStmt, ExpressionStmt, VariableDefineStmt,
-        VariableAccessDefineStmt, IfStmt, ForStmt, FunctionStmt, BinaryOpFunctionStmt,
-        UnaryOpFunctionStmt, WhileStmt, DoWhileStmt, AliasStmt, ClassStmt, ImportStmt
+        ReturnStmt, BreakStmt, ContinueStmt, ExpressionStmt, ImportStmt, AliasStmt,
+        VariableDefineStmt, IfStmt, ForStmt, FunctionStmt, GetFunctionStmt,
+        SetFunctionStmt, WhileStmt, BinaryOpFunctionStmt, UnaryOpFunctionStmt,
+        DoWhileStmt, ClassStmt
     };
 
     struct ASTNode {
@@ -48,22 +49,15 @@ namespace Flame {
     std::ostream& operator<<(std::ostream& os, const ASTNode& node);
 
     struct Parameter {
-        bool ref;
         IdentifierToken id;
         ASTNode type;
+        ASTNode default_;
 
         friend std::ostream& operator<<(std::ostream& os, const Parameter& par) {
-            os << "Parameter(ref=" << par.ref << ", id=" << par.id << ", type=" << par.type << ")";
-            return os;
-        }
-    };
-
-    struct TypeParameter {
-        bool ref;
-        ASTNode type;
-
-        friend std::ostream& operator<<(std::ostream& os, const TypeParameter& par) {
-            os << "TypeParameter(ref=" << par.ref << ", type=" << par.type << ")";
+            os << "Parameter(id=" << par.id
+                << ", type=" << par.type
+                << ", default=" << par.default_
+                << ")";
             return os;
         }
     };
@@ -74,6 +68,34 @@ namespace Flame {
 
         friend std::ostream& operator<<(std::ostream& os, const GenericParameter& par) {
             os << "GenericParameter(id=" << par.id << ", constraint=" << par.constraint << ")";
+            return os;
+        }
+    };
+
+    struct EnumMember {
+        bool manual{};
+        IdentifierToken id;
+        ASTNode value;
+
+        friend std::ostream& operator<<(std::ostream& os, const EnumMember& mem) {
+            os << "EnumMember(manual=" << (mem.manual ? "true" : "false")
+                << ", id=" << mem.id
+                << ", value=" << mem.value
+                << ")";
+            return os;
+        }
+    };
+
+    struct CallArgument {
+        bool spread;
+        std::optional<IdentifierToken> name;
+        ASTNode value;
+
+        friend std::ostream& operator<<(std::ostream& os, const CallArgument& par) {
+            os << "CallArgument(spread=" << (par.spread ? "true" : "false")
+                << ", name=" << par.name
+                << ", value=" << par.value
+                << ")";
             return os;
         }
     };
@@ -98,29 +120,6 @@ namespace Flame {
         }
         return os;
     }
-
-    struct AccessGetFunction {
-        PropVisibility visibility;
-        ASTNode returns;
-        std::vector<ASTNode> body;
-
-        friend std::ostream& operator<<(std::ostream& os, const AccessGetFunction& par) {
-            os << "AccessGetFunction(visibility=" << par.visibility
-                << ", returns=" << par.returns
-                << ", body=" << par.body << ")";
-            return os;
-        }
-    };
-
-    struct AccessSetFunction {
-        PropVisibility visibility;
-        std::vector<ASTNode> body;
-
-        friend std::ostream& operator<<(std::ostream& os, const AccessSetFunction& par) {
-            os << "AccessSetFunction(visibility=" << par.visibility << ", body=" << par.body << ")";
-            return os;
-        }
-    };
 
     struct NoneNode {
         friend std::ostream& operator<<(std::ostream& os, const NoneNode& par) {
@@ -186,7 +185,7 @@ namespace Flame {
 
     struct CallExpr {
         ASTNode callee;
-        std::vector<ASTNode> args;
+        std::vector<CallArgument> args;
         std::vector<ASTNode> typeArgs;
 
         friend std::ostream& operator<<(std::ostream& os, const CallExpr& par) {
@@ -269,12 +268,12 @@ namespace Flame {
 
     struct IfExpr {
         Token ifToken;
-        std::vector<ASTNode> conditions;
+        ASTNode condition;
         std::vector<ASTNode> body;
         std::vector<ASTNode> elseBody;
 
         friend std::ostream& operator<<(std::ostream& os, const IfExpr& par) {
-            os << "IfExpr(conditions=" << par.conditions
+            os << "IfExpr(condition=" << par.condition
                 << ", body=" << par.body
                 << ", elseBody=" << par.elseBody
                 << ")";
@@ -296,17 +295,8 @@ namespace Flame {
         }
     };
 
-    struct ScopeExpr {
-        std::vector<ASTNode> body;
-
-        friend std::ostream& operator<<(std::ostream& os, const ScopeExpr& par) {
-            os << "ScopeExpr(" << par.body << ")";
-            return os;
-        }
-    };
-
     struct LambdaExpr {
-        std::vector<Parameter*> params;
+        std::vector<Parameter> params;
         ASTNode returns;
         std::vector<ASTNode> body;
 
@@ -318,6 +308,16 @@ namespace Flame {
             return os;
         }
     };
+
+    struct ScopeExpr {
+        std::vector<ASTNode> body;
+
+        friend std::ostream& operator<<(std::ostream& os, const ScopeExpr& par) {
+            os << "ScopeExpr(" << par.body << ")";
+            return os;
+        }
+    };
+
 
     struct IdentifierTypeExpr {
         IdentifierToken id;
@@ -353,7 +353,7 @@ namespace Flame {
     };
 
     struct FunctionTypeExpr {
-        std::vector<TypeParameter*> params;
+        std::vector<ASTNode> params;
         ASTNode returns;
 
         friend std::ostream& operator<<(std::ostream& os, const FunctionTypeExpr& par) {
@@ -364,14 +364,15 @@ namespace Flame {
         }
     };
 
-    struct ScopeStmt {
-        std::vector<ASTNode> body;
+    struct ReferenceTypeExpr {
+        ASTNode type;
 
-        friend std::ostream& operator<<(std::ostream& os, const ScopeStmt& par) {
-            os << "ScopeStmt(" << par.body << ")";
+        friend std::ostream& operator<<(std::ostream& os, const ReferenceTypeExpr& par) {
+            os << "ReferenceTypeExpr(" << par.type << ")";
             return os;
         }
     };
+
 
     struct ReturnStmt {
         ASTNode value;
@@ -409,6 +410,30 @@ namespace Flame {
         }
     };
 
+    struct ImportStmt {
+        bool star;
+        ASTNode module;
+        Opt<IdentifierToken> alias;
+
+        friend std::ostream& operator<<(std::ostream& os, const ImportStmt& par) {
+            os << "ImportStmt(star=" << (par.star ? "true" : "false")
+                << ", module=" << par.module
+                << ", alias=" << par.alias
+                << ")";
+            return os;
+        }
+    };
+
+    struct AliasStmt {
+        IdentifierToken id;
+        ASTNode type;
+
+        friend std::ostream& operator<<(std::ostream& os, const AliasStmt& par) {
+            os << "AliasStmt(id=" << par.id << ", type=" << par.type << ")";
+            return os;
+        }
+    };
+
     struct VariableDefineStmt {
         bool constant;
         ASTNode id;
@@ -416,28 +441,10 @@ namespace Flame {
         ASTNode value;
 
         friend std::ostream& operator<<(std::ostream& os, const VariableDefineStmt& par) {
-            os << "VariableDefineStmt(constant=" << par.constant
+            os << "VariableDefineStmt(constant=" << (par.constant ? "true" : "false")
                 << ", id=" << par.id
                 << ", type=" << par.type <<
                 ", value=" << par.value
-                << ")";
-            return os;
-        }
-    };
-
-    struct VariableAccessDefineStmt {
-        bool constant;
-        ASTNode id;
-        ASTNode type;
-        std::vector<AccessGetFunction*> get;
-        std::vector<AccessSetFunction*> set;
-
-        friend std::ostream& operator<<(std::ostream& os, const VariableAccessDefineStmt& par) {
-            os << "VariableAccessDefineStmt(constant=" << par.constant
-                << ", id=" << par.id
-                << ", type=" << par.type
-                << ", get=" << par.get
-                << ", set=" << par.set
                 << ")";
             return os;
         }
@@ -458,20 +465,17 @@ namespace Flame {
     };
 
     struct ForStmt {
-        IdentifierToken id;
-        ASTNode iterator;
+        std::vector<IdentifierToken> identifiers;
         ASTNode iterable;
         std::vector<ASTNode> body;
         std::vector<ASTNode> elseBody;
 
         friend std::ostream& operator<<(std::ostream& os, const ForStmt& par) {
-            os << "ForStmt(id=" << par.id
-                << ", iterator=" << par.iterator
+            os << "ForStmt(identifiers=" << par.identifiers
                 << ", iterable=" << par.iterable
                 << ", body=" << par.body
                 << ", elseBody=" << par.elseBody
                 << ")";
-            os << ")";
             return os;
         }
     };
@@ -479,8 +483,8 @@ namespace Flame {
     struct FunctionStmt {
         PropVisibility visibility;
         ASTNode id;
-        std::vector<GenericParameter*> generics;
-        std::vector<Parameter*> params;
+        std::vector<GenericParameter> generics;
+        std::vector<Parameter> params;
         ASTNode returns;
         std::vector<ASTNode> body;
 
@@ -499,14 +503,14 @@ namespace Flame {
     struct BinaryOpFunctionStmt {
         PropVisibility visibility;
         ASTNode id;
-        Parameter param;
+        std::vector<Parameter> params;
         ASTNode returns;
         std::vector<ASTNode> body;
 
         friend std::ostream& operator<<(std::ostream& os, const BinaryOpFunctionStmt& par) {
             os << "BinaryOpFunctionStmt(visibility=" << par.visibility
                 << ", id=" << par.id
-                << ", param=" << par.param
+                << ", params=" << par.params
                 << ", returns=" << par.returns
                 << ", body=" << par.body
                 << ")";
@@ -517,13 +521,49 @@ namespace Flame {
     struct UnaryOpFunctionStmt {
         PropVisibility visibility;
         ASTNode id;
+        std::optional<Parameter> param;
         ASTNode returns;
         std::vector<ASTNode> body;
 
         friend std::ostream& operator<<(std::ostream& os, const UnaryOpFunctionStmt& par) {
             os << "UnaryOpFunctionStmt(visibility=" << par.visibility
                 << ", id=" << par.id
+                << ", param=" << par.param
                 << ", returns=" << par.returns
+                << ", body=" << par.body
+                << ")";
+            return os;
+        }
+    };
+
+    struct GetFunctionStmt {
+        PropVisibility visibility;
+        ASTNode id;
+        std::optional<Parameter> param;
+        ASTNode returns;
+        std::vector<ASTNode> body;
+
+        friend std::ostream& operator<<(std::ostream& os, const GetFunctionStmt& par) {
+            os << "GetFunctionStmt(visibility=" << par.visibility
+                << ", id=" << par.id
+                << ", param=" << par.param
+                << ", returns=" << par.returns
+                << ", body=" << par.body
+                << ")";
+            return os;
+        }
+    };
+
+    struct SetFunctionStmt {
+        PropVisibility visibility;
+        ASTNode id;
+        std::vector<Parameter> params;
+        std::vector<ASTNode> body;
+
+        friend std::ostream& operator<<(std::ostream& os, const SetFunctionStmt& par) {
+            os << "SetFunctionStmt(visibility=" << par.visibility
+                << ", id=" << par.id
+                << ", params=" << par.params
                 << ", body=" << par.body
                 << ")";
             return os;
@@ -558,52 +598,38 @@ namespace Flame {
         }
     };
 
-    struct AliasStmt {
-        IdentifierToken id;
-        ASTNode type;
-
-        friend std::ostream& operator<<(std::ostream& os, const AliasStmt& par) {
-            os << "AliasStmt(id=" << par.id << ", type=" << par.type << ")";
-            return os;
-        }
-    };
-
     struct ClassStmt {
+        bool isEnum;
         IdentifierToken id;
-        std::vector<GenericParameter*> generics;
+        std::vector<GenericParameter> generics;
         ASTNode superClass;
-        std::vector<GenericParameter*> superClassGenerics;
-        std::vector<FunctionTypeExpr*> constructors;
+        std::vector<GenericParameter> superClassGenerics;
+        std::vector<FunctionStmt*> constructors;
         std::vector<VariableDefineStmt*> properties;
-        std::vector<VariableAccessDefineStmt*> accessors;
+        std::vector<GetFunctionStmt*> getters;
+        std::vector<SetFunctionStmt*> setters;
         std::vector<FunctionStmt*> methods;
         std::vector<FunctionStmt*> staticMethods;
         std::vector<BinaryOpFunctionStmt*> binaryOperators;
         std::vector<UnaryOpFunctionStmt*> unaryOperators;
+        std::vector<EnumMember> enumMembers;
 
         friend std::ostream& operator<<(std::ostream& os, const ClassStmt& par) {
             os << "ClassStmt(id=" << par.id
+                << ", isEnum=" << (par.isEnum ? "true" : "false")
                 << ", generics=" << par.generics
                 << ", superClass=" << par.superClass
                 << ", superClassGenerics=" << par.superClassGenerics
                 << ", constructors=" << par.constructors
                 << ", properties=" << par.properties
-                << ", accessors=" << par.accessors
+                << ", getters=" << par.getters
+                << ", setters=" << par.setters
                 << ", methods=" << par.methods
                 << ", staticMethods=" << par.staticMethods
                 << ", binaryOperators=" << par.binaryOperators
                 << ", unaryOperators=" << par.unaryOperators
+                << ", enumMembers=" << par.enumMembers
                 << ")";
-            return os;
-        }
-    };
-
-    struct ImportStmt {
-        ASTNode module;
-        Opt<IdentifierToken> alias;
-
-        friend std::ostream& operator<<(std::ostream& os, const ImportStmt& par) {
-            os << "ImportStmt(module=" << par.module << ", alias=" << par.alias << ")";
             return os;
         }
     };
@@ -637,10 +663,10 @@ namespace Flame {
             return visitor(node.as<IfExpr>());
         case ASTNodeKind::RangeExpr:
             return visitor(node.as<RangeExpr>());
-        case ASTNodeKind::ScopeExpr:
-            return visitor(node.as<ScopeExpr>());
         case ASTNodeKind::LambdaExpr:
             return visitor(node.as<LambdaExpr>());
+        case ASTNodeKind::ScopeExpr:
+            return visitor(node.as<ScopeExpr>());
         case ASTNodeKind::IdentifierTypeExpr:
             return visitor(node.as<IdentifierTypeExpr>());
         case ASTNodeKind::ArrayTypeExpr:
@@ -649,8 +675,8 @@ namespace Flame {
             return visitor(node.as<OptionalTypeExpr>());
         case ASTNodeKind::FunctionTypeExpr:
             return visitor(node.as<FunctionTypeExpr>());
-        case ASTNodeKind::ScopeStmt:
-            return visitor(node.as<ScopeStmt>());
+        case ASTNodeKind::ReferenceTypeExpr:
+            return visitor(node.as<ReferenceTypeExpr>());
         case ASTNodeKind::ReturnStmt:
             return visitor(node.as<ReturnStmt>());
         case ASTNodeKind::BreakStmt:
@@ -659,10 +685,12 @@ namespace Flame {
             return visitor(node.as<ContinueStmt>());
         case ASTNodeKind::ExpressionStmt:
             return visitor(node.as<ExpressionStmt>());
+        case ASTNodeKind::ImportStmt:
+            return visitor(node.as<ImportStmt>());
+        case ASTNodeKind::AliasStmt:
+            return visitor(node.as<AliasStmt>());
         case ASTNodeKind::VariableDefineStmt:
             return visitor(node.as<VariableDefineStmt>());
-        case ASTNodeKind::VariableAccessDefineStmt:
-            return visitor(node.as<VariableAccessDefineStmt>());
         case ASTNodeKind::IfStmt:
             return visitor(node.as<IfStmt>());
         case ASTNodeKind::ForStmt:
@@ -673,16 +701,16 @@ namespace Flame {
             return visitor(node.as<BinaryOpFunctionStmt>());
         case ASTNodeKind::UnaryOpFunctionStmt:
             return visitor(node.as<UnaryOpFunctionStmt>());
+        case ASTNodeKind::GetFunctionStmt:
+            return visitor(node.as<GetFunctionStmt>());
+        case ASTNodeKind::SetFunctionStmt:
+            return visitor(node.as<SetFunctionStmt>());
         case ASTNodeKind::WhileStmt:
             return visitor(node.as<WhileStmt>());
         case ASTNodeKind::DoWhileStmt:
             return visitor(node.as<DoWhileStmt>());
-        case ASTNodeKind::AliasStmt:
-            return visitor(node.as<AliasStmt>());
         case ASTNodeKind::ClassStmt:
             return visitor(node.as<ClassStmt>());
-        case ASTNodeKind::ImportStmt:
-            return visitor(node.as<ImportStmt>());
         }
         return visitor(node.as<NoneNode>());
     }
@@ -700,9 +728,37 @@ namespace Flame {
             : tokenizer(tokenizer), cur(tokenizer.files.begin()->second), arena(arena) {
         }
 
+        [[nodiscard]] Token Get(size_t index) const {
+            if (index >= cur.tokens.size()) return {TokenType::EndOfFile, cur.content.end()._Ptr, 0};
+            return cur.tokens[index];
+        }
+
         [[nodiscard]] Token Peek() const {
             if (Over()) return {TokenType::EndOfFile, cur.content.end()._Ptr, 0};
             return cur.tokens[current];
+        }
+
+        [[nodiscard]] Token PeekNoLine() const {
+            for (auto i = current; i < cur.tokens.size(); i++) {
+                if (cur.tokens[i].type != TokenType::NewLine) {
+                    return cur.tokens[i];
+                }
+            }
+            return {TokenType::EndOfFile, cur.content.end()._Ptr, 0};
+        }
+
+        [[nodiscard]] Token Peek(int offset) const {
+            if (current + offset >= cur.tokens.size()) return {TokenType::EndOfFile, cur.content.end()._Ptr, 0};
+            return cur.tokens[current + offset];
+        }
+
+        [[nodiscard]] Token PeekNoLine(int offset) const {
+            for (auto i = current + offset; i < cur.tokens.size(); i++) {
+                if (cur.tokens[i].type != TokenType::NewLine) {
+                    return cur.tokens[i];
+                }
+            }
+            return {TokenType::EndOfFile, cur.content.end()._Ptr, 0};
         }
 
         [[nodiscard]] Token Next() {
@@ -713,10 +769,19 @@ namespace Flame {
         void Expect(TokenType type) {
             if (Peek().type != type) {
                 ThrowError(
-                    "Expected token of type " + std::to_string(static_cast<int>(type)) + ", got " +
-                    std::string(Peek().value) + "(" + std::to_string(static_cast<int>(Peek().type)) + ")", Peek());
+                    "Expected '" + GetTokenValue(type) + "', got '" +
+                    std::string(Peek().value) + "' which is a " + GetTokenTypeName(Peek().type), Peek()
+                );
             }
             current++;
+        }
+
+        void Expect(SymbolType type) {
+            return Expect(static_cast<TokenType>(type));
+        }
+
+        void Expect(OperatorType type) {
+            return Expect(static_cast<TokenType>(type));
         }
 
         [[nodiscard]] bool Over() const {
@@ -767,10 +832,10 @@ namespace Flame {
                 ThrowError(message, node.as<IfExpr>().ifToken);
             case ASTNodeKind::RangeExpr:
                 ThrowError(message, node.as<RangeExpr>().start);
+            case ASTNodeKind::LambdaExpr:
+                ThrowError(message, node.as<LambdaExpr>().params[0].id);
             case ASTNodeKind::ScopeExpr:
                 ThrowError(message, node.as<ScopeExpr>().body[0]);
-            case ASTNodeKind::LambdaExpr:
-                ThrowError(message, node.as<LambdaExpr>().params[0]->id);
             case ASTNodeKind::IdentifierTypeExpr:
                 ThrowError(message, node.as<IdentifierTypeExpr>().id);
             case ASTNodeKind::ArrayTypeExpr:
@@ -778,9 +843,9 @@ namespace Flame {
             case ASTNodeKind::OptionalTypeExpr:
                 ThrowError(message, node.as<OptionalTypeExpr>().type);
             case ASTNodeKind::FunctionTypeExpr:
-                ThrowError(message, node.as<FunctionTypeExpr>().params[0]->type);
-            case ASTNodeKind::ScopeStmt:
-                ThrowError(message, node.as<ScopeStmt>().body[0]);
+                ThrowError(message, node.as<FunctionTypeExpr>().params[0]);
+            case ASTNodeKind::ReferenceTypeExpr:
+                ThrowError(message, node.as<ReferenceTypeExpr>().type);
             case ASTNodeKind::ReturnStmt:
                 ThrowError(message, node.as<ReturnStmt>().value);
             case ASTNodeKind::BreakStmt:
@@ -789,30 +854,32 @@ namespace Flame {
                 ThrowError(message, node.as<ContinueStmt>().token);
             case ASTNodeKind::ExpressionStmt:
                 ThrowError(message, node.as<ExpressionStmt>().expr);
+            case ASTNodeKind::ImportStmt:
+                ThrowError(message, node.as<ImportStmt>().module);
+            case ASTNodeKind::AliasStmt:
+                ThrowError(message, node.as<AliasStmt>().id);
             case ASTNodeKind::VariableDefineStmt:
                 ThrowError(message, node.as<VariableDefineStmt>().id);
-            case ASTNodeKind::VariableAccessDefineStmt:
-                ThrowError(message, node.as<VariableAccessDefineStmt>().id);
             case ASTNodeKind::IfStmt:
                 ThrowError(message, node.as<IfStmt>().conditions[0]);
             case ASTNodeKind::ForStmt:
-                ThrowError(message, node.as<ForStmt>().id);
+                ThrowError(message, node.as<ForStmt>().iterable);
             case ASTNodeKind::FunctionStmt:
                 ThrowError(message, node.as<FunctionStmt>().id);
             case ASTNodeKind::BinaryOpFunctionStmt:
                 ThrowError(message, node.as<BinaryOpFunctionStmt>().id);
             case ASTNodeKind::UnaryOpFunctionStmt:
                 ThrowError(message, node.as<UnaryOpFunctionStmt>().id);
+            case ASTNodeKind::GetFunctionStmt:
+                ThrowError(message, node.as<GetFunctionStmt>().id);
+            case ASTNodeKind::SetFunctionStmt:
+                ThrowError(message, node.as<SetFunctionStmt>().id);
             case ASTNodeKind::WhileStmt:
                 ThrowError(message, node.as<WhileStmt>().condition);
             case ASTNodeKind::DoWhileStmt:
                 ThrowError(message, node.as<DoWhileStmt>().body[0]);
-            case ASTNodeKind::AliasStmt:
-                ThrowError(message, node.as<AliasStmt>().id);
             case ASTNodeKind::ClassStmt:
                 ThrowError(message, node.as<ClassStmt>().id);
-            case ASTNodeKind::ImportStmt:
-                ThrowError(message, node.as<ImportStmt>().module);
             }
         }
 
@@ -823,12 +890,19 @@ namespace Flame {
             return ASTNode{type, mem};
         }
 
+        void SkipNewLines() {
+            while (Peek().type == TokenType::NewLine) current++;
+        }
+
         ASTNode ParseSingle();
-        ASTNode ParseExpr(int rbp = 0, bool endAtGt = false);
-        void ParseExpressions(std::vector<ASTNode>& result, bool endAtGt = false);
-        ASTNode ParseIdentifierTypeExpr();
-        ASTNode ParseFunctionTypeExpr();
-        ASTNode ParseTypeExpr();
-        void ParseTypeGenerics(std::vector<ASTNode>& result);
+        ASTNode ParseExpr(int rbp = 0, bool endAtGt = false, bool ignoreNewLines = false);
+        void ParseExpressions(std::vector<ASTNode>& result, bool endAtGt = false, bool ignoreNewLines = false);
+        ASTNode ParseSingleTypeExpr(bool allowExpr = false);
+        ASTNode ParseTypeExpr(bool allowExpr = false);
+        void ParseTypeExpressions(std::vector<ASTNode>& result, bool allowExpr = false);
+        ASTNode ParsePropertyExpr(); // despite the name it might return VariableExpr
+        ASTNode ParseStmt();
+        void ParseBracedBlock(std::vector<ASTNode>& result);
+        void ParseStatements(std::vector<ASTNode>& result);
     };
 }

@@ -1,54 +1,59 @@
 class Vec<T> {
-    size: int
-      private set // works as normal
-      public set() {}
-    capacity: int
-      private set
-    private data: Box<T[]> // by default it's Box<empty T[]> empty arrays are actually nullptrs internally, but are handled gracefully
-
-    init = default // defining so that it can be initialized with no arguments
+    private _size: int
+    get size() = _size
+    private _capacity: int
+    get capacity() = _capacity
+    private data: Box<T[]>
 
     reserve(r: int) {
-        if (capacity < r) {
-            capacity = r
-            data = Box<T[r]>(data)
+        if (_capacity < r) {
+            _capacity = r
+            data = Box<T[_capacity]>(data)
         }
     }
 
-    push(&element: T) { // & so that it's fast
-        if (size + 1 > capacity) {
-            capacity *= 2
-            data = Box<T[capacity]>(data)
+    push(element: &T) {
+        if (_size + 1 > _capacity) {
+            _capacity *= 2
+            data = Box<T[_capacity]>(data)
         }
-        data[size++] = element
+        data[_size++] = element
     }
 
-    pop() {
-        if (size == 0) return null
-        return data[size--]
+    emplace(...args: Arguments<T.init>) {
+        if (_size + 1 > _capacity) {
+            _capacity *= 2
+            data = Box<T[_capacity]>(data)
+        }
+        data[_size++] = T(...args)
     }
 
-    back() {
-        if (size == 0) return null
-        return data[size - 1]
+    pop(): Opt<&T> {
+        if (_size == 0) return null
+        return data[_size--]
     }
 
-    indexOf(element: T) {
-        for (i in 0..size) {
+    back(): Opt<&T> {
+        if (_size == 0) return null
+        return data[_size - 1]
+    }
+
+    indexOf(element: T): Opt<int> {
+        for (i in 0.._size) {
             if (data[i] == element) return i
         }
-        return -1
+        return null
     }
 
-    find(search: (T) -> bool) {
-        for (i in 0..size) {
+    find(search: (T) -> bool): Opt<&T> {
+        for (i in 0.._size) {
             if (search(data[i])) return data[i]
         }
         return null
     }
 
     findIndexOf(search: (T) -> bool) {
-        for (i in 0..size) {
+        for (i in 0.._size) {
             if (search(data[i])) return i
         }
         return -1
@@ -63,7 +68,7 @@ class Vec<T> {
     }
 
     operator in(element: T) {
-        for (i in 0..size) {
+        for (i in 0.._size) {
             if (data[i] == element) return true
         }
         return false
@@ -71,13 +76,5 @@ class Vec<T> {
 
     shrink() {
         data.resize()
-    }
-
-    emplace_back(...args: Arguments<T.init>) {
-        if (size + 1 > capacity) {
-            capacity *= 2
-            data = Box<T[capacity]>(data)
-        }
-        data[size++] = T(...args)
     }
 }
