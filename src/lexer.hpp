@@ -11,8 +11,9 @@
 #include <vector>
 
 #include "utils.hpp"
+#include "utfcpp/utf8/checked.h"
 
-static bool PrintTokenValue = true;
+static bool PrintTokenValue = false;
 
 namespace Flame {
     enum class TokenType {
@@ -20,6 +21,7 @@ namespace Flame {
         Identifier,
         Integer,
         Float,
+        Char,
         String,
         Boolean,
         StringStart,
@@ -36,10 +38,11 @@ namespace Flame {
         OperatorChars, Operator = OperatorChars,
         OperatorAssign          = OperatorChars, OperatorAdd, OperatorSub, OperatorMul, OperatorDiv, OperatorMod,
         OperatorNot, OperatorLt, OperatorGt, OperatorBitAnd, OperatorBitOr, OperatorBitXor, OperatorBitNot,
+        OperatorMatMul,
 
         OperatorStrings,
         OperatorSetShl = OperatorStrings, OperatorSetShr, OperatorSetAdd, OperatorSetSub, OperatorSetMul,
-        OperatorSetDiv, OperatorSetMod, OperatorSetBitAnd, OperatorSetBitOr, OperatorSetBitXor,
+        OperatorSetDiv, OperatorSetMod, OperatorSetBitAnd, OperatorSetBitOr, OperatorSetBitXor, OperatorSetMatMul,
 
         OperatorEq, OperatorNeq, OperatorLte, OperatorGte, OperatorAnd, OperatorOr, OperatorInc, OperatorDec,
         OperatorShl, OperatorShr,
@@ -54,8 +57,9 @@ namespace Flame {
         if (type == TokenType::Identifier) return "Identifier";
         if (type == TokenType::Integer) return "Integer";
         if (type == TokenType::Float) return "Float";
-        if (type == TokenType::String || type == TokenType::StringStart || type == TokenType::StringMiddle || type ==
-            TokenType::StringEnd)
+        if (type == TokenType::Char) return "Char";
+        if (type == TokenType::String || type == TokenType::StringStart || type == TokenType::StringMiddle
+            || type == TokenType::StringEnd)
             return "String";
         if (type == TokenType::Boolean) return "Boolean";
         if (type == TokenType::NewLine) return "NewLine";
@@ -68,10 +72,10 @@ namespace Flame {
 
     enum class OperatorType {
         Assign = static_cast<int>(TokenType::OperatorAssign), Add, Sub, Mul, Div, Mod,
-        Not, Lt, Gt, BitAnd, BitOr, BitXor, BitNot,
+        Not, Lt, Gt, BitAnd, BitOr, BitXor, BitNot, MatMul,
 
-        SetShl, SetShr, SetAdd, SetSub, SetMul,
-        SetDiv, SetMod, SetBitAnd, SetBitOr, SetBitXor,
+        SetShl, SetShr, SetAdd, SetSub, SetMul, SetDiv,
+        SetMod, SetBitAnd, SetBitOr, SetBitXor, SetMatMul,
 
         Eq, Neq, Lte, Gte, And, Or, Inc, Dec,
         Shl, Shr
@@ -94,8 +98,8 @@ namespace Flame {
         }
 
         [[nodiscard]] static constexpr bool is_literal(TokenType type) {
-            return type == TokenType::Integer || type == TokenType::Float || type == TokenType::String || type ==
-                TokenType::Boolean;
+            return type == TokenType::Integer || type == TokenType::Float || type == TokenType::Char
+                || type == TokenType::String || type == TokenType::Boolean;
         }
 
         [[nodiscard]] static constexpr bool is_keyword(TokenType type) {
@@ -113,7 +117,7 @@ namespace Flame {
 
         [[nodiscard]] static constexpr bool is_set_operator(TokenType type) {
             return type == TokenType::OperatorAssign || (type >= TokenType::OperatorSetShl && type <=
-                TokenType::OperatorSetBitXor);
+                TokenType::OperatorSetMatMul);
         }
 
         [[nodiscard]] static constexpr bool is_arithmetic_operator(TokenType type) {
@@ -242,6 +246,8 @@ namespace Flame {
             os << "Integer";
         } else if constexpr (T == TokenType::Float) {
             os << "Float";
+        } else if constexpr (T == TokenType::Char) {
+            os << "Char";
         } else if constexpr (T == TokenType::String) {
             os << "String";
         } else if constexpr (T == TokenType::Boolean) {
@@ -385,6 +391,8 @@ namespace Flame {
                 break;
             case TokenType::Float: typeName = "Float";
                 break;
+            case TokenType::Char: typeName = "Char";
+                break;
             case TokenType::String: typeName = "String";
                 break;
             case TokenType::Boolean: typeName = "Boolean";
@@ -421,6 +429,7 @@ namespace Flame {
     using IdentifierToken = TokenComp<TokenType::Identifier>;
     using IntegerToken = TokenComp<TokenType::Integer>;
     using FloatToken = TokenComp<TokenType::Float>;
+    using CharToken = TokenComp<TokenType::Char>;
     using StringToken = TokenComp<TokenType::String>;
     using BooleanToken = TokenComp<TokenType::Boolean>;
     using StringStartToken = TokenComp<TokenType::StringStart>;
@@ -433,43 +442,159 @@ namespace Flame {
     constexpr auto BOLD = "\033[1m";
     constexpr auto RESET = "\033[0m";
 
+    [[nodiscard]] static constexpr bool IsDigit(utf8::utfchar32_t c) {
+        return c >= '0' && c <= '9';
+    }
+
+    [[nodiscard]] static constexpr bool IsSpace(utf8::utfchar32_t c) {
+        return c == ' ' || c == '\t' || c == '\r';
+    }
+
+    template <typename T>
+    [[nodiscard]] inline utf8::utfchar32_t UTFNext(T& offset, T end) {
+        if (offset >= end) return 0;
+        return utf8::next(offset, end);
+    }
+
+    template <typename T>
+    inline void UTFSkip(T& offset, T end) {
+        if (offset >= end) return;
+        utf8::next(offset, end);
+    }
+
+    template <typename T>
+    [[nodiscard]] static utf8::utfchar32_t UTFPeek(T offset, T end, int amount = 0) {
+        if (offset >= end) return 0;
+        for (int i = 0; i < amount; i++) {
+            UTFSkip(offset, end);
+            if (offset >= end) return 0;
+        }
+        return utf8::next(offset, end);
+    }
+
+    template <typename T>
+    [[nodiscard]] static utf8::utfchar32_t UTFBack(T& offset, T start) {
+        if (offset >= start) return 0;
+        return utf8::prior(offset, start);
+    }
+
+    template <typename T>
+    static void UTFSkipBack(T& offset, T start) {
+        if (offset >= start) return;
+        utf8::prior(offset, start);
+    }
+
+    template <typename T>
+    [[nodiscard]] static utf8::utfchar32_t UTFPeekBack(T offset, T start, int amount = 0) {
+        if (offset >= start) return 0;
+        for (int i = 0; i < amount; i++) {
+            UTFSkipBack(offset, start);
+            if (offset >= start) return 0;
+        }
+        return utf8::prior(offset, start);
+    }
+
+    [[nodiscard]] static bool StringStartsWith(const char* offset, const std::string& str) {
+        auto end = offset + str.length();
+        auto strStart = str.data();
+        auto strEnd = strStart + str.length();
+        while (*strStart != 0) {
+            if (UTFNext(offset, end) != UTFNext(strStart, strEnd)) return false;
+        }
+        return true;
+    }
+
+    [[nodiscard]] static constexpr bool IsNewLine(utf8::utfchar32_t c) {
+        return c == '\n' || c == 0x2028 || c == 0x2029;
+    }
+
     struct FileTokenizer {
         std::string filepath;
-        std::string content;
+        std::string _content;
+        char* it{nullptr};
+        char* end{nullptr};
         std::vector<Token> tokens;
 
         void Tokenize();
 
-        [[noreturn]] void ThrowError(const std::string& message, size_t start, size_t length = 1) const {
-            if (content[start] == '\n' && start + 1 < content.size()) {
-                ++start;
+        [[nodiscard]] utf8::utfchar32_t Peek() const {
+            return UTFPeek(it, end);
+        }
+
+        [[nodiscard]] utf8::utfchar32_t Peek(int amount) const {
+            return UTFPeek(it, end, amount);
+        }
+
+        [[nodiscard]] utf8::utfchar32_t Next() {
+            return UTFNext(it, end);
+        }
+
+        void Skip() {
+            UTFSkip(it, end);
+        }
+
+        void SkipDigits() {
+            while (!Over()) {
+                auto c2 = Peek();
+                if (c2 != '_' && !IsDigit(c2)) break;
+                Skip();
+            }
+        }
+
+        [[nodiscard]] constexpr bool Over() const {
+            return it >= end;
+        }
+
+        void AddToken(TokenType type, char* offset, size_t length) {
+            tokens.emplace_back(type, offset, length);
+        }
+
+        void AddToken(TokenType type, size_t length) {
+            tokens.emplace_back(type, it, length);
+        }
+
+        [[noreturn]] void ThrowError(const std::string& message, const char* offset, size_t length = 1) const {
+            auto start = _content.data();
+            const char* constEnd = this->end;
+            if (offset >= constEnd) {
+                offset = constEnd;
+                utf8::prior(offset, start);
             }
 
-            size_t lineStart = content.rfind('\n', start);
-            if (lineStart == std::string::npos) lineStart = 0;
-            else lineStart += 1;
-
-            size_t lineNumber = 1;
-            for (size_t i = 0; i < lineStart; i++) {
-                if (content[i] == '\n') lineNumber++;
+            if (IsNewLine(UTFPeek(offset, constEnd)) && UTFPeek(offset, constEnd, 1)) {
+                UTFSkip(offset, constEnd);
             }
 
             std::vector<std::string_view> lines;
-            size_t pos = 0;
-            while (pos < content.size()) {
-                size_t next = content.find('\n', pos);
-                if (next == std::string::npos) next = content.size();
-                lines.emplace_back(content.data() + pos, next - pos);
-                pos = next + 1;
+            size_t wantedLine = 0;
+            size_t walkLineIndex = 0;
+            auto lineStart = start;
+            auto pos = start;
+            while (pos < constEnd) {
+                auto c = UTFPeek(pos, constEnd);
+                if (IsNewLine(c)) {
+                    if (offset >= lineStart && offset < pos) wantedLine = walkLineIndex;
+                    lines.emplace_back(lineStart, pos - lineStart);
+                    UTFSkip(pos, constEnd);
+                    lineStart = pos;
+                    walkLineIndex++;
+                    continue;
+                }
+                UTFSkip(pos, constEnd);
             }
 
-            for (int i = static_cast<int>(lineNumber) - 3; i <= static_cast<int>(lineNumber) + 1; i++) {
-                if (i < 0 || i >= static_cast<int>(lines.size())) continue;
-                std::cerr << RED << (i + 1 == static_cast<int>(lineNumber) ? "> " : "  ") << (i + 1) << ") ";
+            if (lineStart < constEnd) {
+                if (offset >= lineStart && offset <= constEnd) wantedLine = walkLineIndex;
+                lines.emplace_back(lineStart, constEnd - lineStart);
+            }
+
+            for (auto i = wantedLine > 2 ? wantedLine - 3 : 0; i <= wantedLine + 1; i++) {
+                if (i < 0 || i >= lines.size()) continue;
+                std::cerr << RED << (i == wantedLine ? "> " : "  ") << (i + 1) << ") ";
                 auto& curLine = lines[i];
 
-                if (i + 1 == static_cast<int>(lineNumber)) {
-                    auto colStart = start - lineStart;
+                if (i == wantedLine) {
+                    size_t colStart = offset - curLine.data();
                     if (colStart > curLine.size()) colStart = curLine.size(); // clamp
 
                     auto before = curLine.substr(0, colStart);
@@ -486,12 +611,15 @@ namespace Flame {
 
             std::cerr << "\n" << RED << filepath << ": " << message << std::endl;
 
-            //throw std::runtime_error("test");
             exit(1);
         }
 
+        [[noreturn]] void ThrowError(const std::string& message, size_t length = 1) const {
+            ThrowError(message, it, length);
+        }
+
         [[noreturn]] void ThrowError(const std::string& message, const std::string_view& view) const {
-            ThrowError(message, view.data() - content.data(), view.size());
+            ThrowError(message, view.data(), view.size());
         }
 
         [[noreturn]] void ThrowError(const std::string& message, const TokenImpl& token) const {
@@ -506,14 +634,16 @@ namespace Flame {
             if (files.contains(filepath)) return;
             auto& tokenizer = files[filepath];
             tokenizer.filepath = filepath;
-            GetFileContent(filepath, tokenizer.content);
+            GetFileContent(filepath, tokenizer._content);
+            tokenizer.it = tokenizer._content.data();
+            tokenizer.end = tokenizer._content.data() + tokenizer._content.size();
             tokenizer.Tokenize();
         }
 
         [[noreturn]] void ThrowError(const std::string& message, const Token& token) const {
             for (const auto& file : files | std::views::values) {
-                if (token.value.data() >= file.content.data()
-                    && token.value.data() < file.content.data() + file.content.size()
+                if (token.value.data() >= file._content.data()
+                    && token.value.data() < file._content.data() + file._content.size()
                 ) {
                     file.ThrowError(message, token);
                 }

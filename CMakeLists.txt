@@ -19,6 +19,7 @@ add_executable(flame src/main.cpp
         src/parser.hpp
         src/parser.cpp
         src/arena.hpp
+        src/utfcpp/utf8.h
 )
 
 target_include_directories(flame PRIVATE ${LLVM_INCLUDE_DIRS})

@@ -1,25 +1,29 @@
 #include "lexer.hpp"
+#include "utfcpp/utf8.h"
 
 #include <cstring>
 
 using namespace Flame;
 
 constexpr char charOperators[] = {
-    '=', '+', '-', '*', '/', '%', '!', '<', '>', '&', '|', '^', '~'
+    '=', '+', '-', '*', '/', '%', '!', '<', '>', '&', '|', '^', '~', '@'
 };
-const char* operators[] = {
-    "<<=", ">>=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=",
+const std::string operators[] = {
+    "<<=", ">>=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "@=",
     "==", "!=", "<=", ">=", "&&", "||", "++", "--", "<<", ">>"
 };
 constexpr char symbols[] = {
     '(', ')', '{', '}', '[', ']', ',', ':', '.', '?'
 };
-const char* keywords[] = {
+const std::string keywords[] = {
     "if", "else", "while", "for", "return", "fun", "class",
     "import", "var", "val", "break", "continue", "when", "try",
     "catch", "finally", "throw", "get", "set", "default", "delete",
     "in", "as", "do", "alias", "enum"
 };
+
+const std::string TRUE_STRING = "true";
+const std::string FALSE_STRING = "false";
 
 std::string Flame::GetTokenValue(TokenType type) {
     if (type <= TokenType::NewLine) return GetTokenTypeName(type);
@@ -35,20 +39,20 @@ std::string Flame::GetTokenValue(TokenType type) {
     return std::string{symbols[static_cast<int>(type) - static_cast<int>(TokenType::Symbols)]};
 }
 
-int GetOperator(char c) {
+[[nodiscard]] constexpr int GetOperator(utf8::utfchar32_t c) {
     int size = std::size(charOperators);
     for (int i = 0; i < size; i++) if (c == charOperators[i]) return i;
     return -1;
 }
 
-int GetSymbol(char c) {
+[[nodiscard]] constexpr int GetSymbol(utf8::utfchar32_t c) {
     constexpr int size = std::size(symbols);
     for (int i = 0; i < size; i++) if (c == symbols[i]) return i;
     return -1;
 }
 
-bool IsIdentifierChar(char c) {
-    return GetSymbol(c) == -1 && GetOperator(c) == -1 && !std::isspace(c);
+[[nodiscard]] constexpr bool IsIdentifierChar(utf8::utfchar32_t c) {
+    return GetSymbol(c) == -1 && GetOperator(c) == -1 && !IsSpace(c);
 }
 
 TokenType operator+(TokenType lhs, int rhs) {
@@ -56,102 +60,79 @@ TokenType operator+(TokenType lhs, int rhs) {
 }
 
 void FileTokenizer::Tokenize() {
-    auto addToken = [&](TokenType type, size_t start, size_t length) {
-        tokens.emplace_back(type, content.data() + start, length);
-    };
-
-    size_t i = 0;
     size_t fstrings = 0;
-    while (i < content.size()) {
-        char c = content[i];
+    while (!Over()) {
+        auto c = Peek();
 
-        if (c == '\n' || c == ';') {
-            if (tokens.empty() || tokens.back().type != TokenType::NewLine) {
-                addToken(TokenType::NewLine, i, 1);
-            }
-            i++;
+        if (IsNewLine(c) || c == ';') {
+            AddToken(TokenType::NewLine, 1);
+            Skip();
             continue;
         }
 
-        if (std::isspace(c)) {
-            i++;
+        if (IsSpace(c)) {
+            Skip();
             continue;
         }
 
-        if (std::isdigit(c)) {
-            size_t start = i;
+        if (IsDigit(c)) {
+            auto start = it;
+            Skip();
             bool is_float = false;
-            i++;
-            while (i < content.size()) {
-                char c2 = content[i];
-                if (std::isdigit(c2) || c2 == '_') i++;
-                else break;
-            }
-            if (content[i] == '.'
-                && i + 1 < content.size()
-                && std::isdigit(content[i + 1])
-            ) {
+            SkipDigits();
+            if (Peek() == '.' && IsDigit(Peek(1))) {
                 is_float = true;
-                i++;
-                while (i < content.size()) {
-                    char c2 = content[i];
-                    if (std::isdigit(c2) || c2 == '_') i++;
-                    else break;
-                }
-                char c2 = content[i];
+                Skip();
+                Skip();
+                SkipDigits();
+                auto c2 = Peek();
                 if (c2 == 'e' || c2 == 'E') {
-                    i++;
-                    if (i < content.size() || !std::isdigit(content[i])) {
-                        ThrowError("Expected a digit", i);
+                    Skip();
+                    if (!IsDigit(Peek())) {
+                        ThrowError("Expected a digit");
                     }
-                    while (i < content.size()) {
-                        char c3 = content[i];
-                        if (std::isdigit(c3) || c3 == '_') i++;
-                        else break;
-                    }
+                    SkipDigits();
                 }
             }
-            addToken(is_float ? TokenType::Float : TokenType::Integer, start, i - start);
+            AddToken(is_float ? TokenType::Float : TokenType::Integer, start, it - start);
             continue;
         }
 
         if (fstrings > 0 && c == '}') {
-            i++;
+            Skip();
             fstrings--;
             bool slash = false;
-            size_t start = i;
-            while (i < content.size()) {
-                char c2 = content[i];
-                i++;
-                if (c2 == '"' && !slash) {
-                    break;
-                }
-                if (c2 == '$' && !slash) {
-                    c2 = content[i];
-                    if (c2 == '{') {
-                        i++;
+            auto start = it;
+            utf8::utfchar32_t last{0};
+            while (!Over()) {
+                last = Next();
+                if (last == '"' && !slash) break;
+
+                if (last == '$' && !slash) {
+                    last = Peek();
+                    if (last == '{') {
+                        Skip();
                         break;
                     }
-                    addToken(TokenType::StringMiddle, start, i - start);
-                    size_t id_index = i;
-                    while (i < content.size()) {
-                        i++;
-                        c2 = content[i];
-                        if (!IsIdentifierChar(c2)) break;
+                    AddToken(TokenType::StringMiddle, start, it - start);
+                    auto id_index = it;
+                    while (!Over()) {
+                        last = Next();
+                        if (!IsIdentifierChar(last)) break;
                     }
-                    addToken(TokenType::Identifier, id_index, i - id_index);
-                    start = i;
+                    AddToken(TokenType::Identifier, id_index, it - id_index);
+                    start = it;
                     continue;
                 }
-                if (c2 == '\\') {
+
+                if (last == '\\') {
                     slash = !slash;
                 } else slash = false;
             }
-            char c2 = content[i - 1];
-            if (c2 == '"') {
-                addToken(TokenType::StringEnd, start, i - start - 1);
-            } else if (c2 == '{') {
-                addToken(TokenType::StringMiddle, start, i - start - 2);
+            if (last == '"') {
+                AddToken(TokenType::StringEnd, start, it - start - 1);
+            } else if (last == '{') {
+                AddToken(TokenType::StringMiddle, start, it - start - 2);
                 fstrings++;
             } else {
                 ThrowError("Unterminated string literal", start);
@@ -159,29 +140,34 @@ void FileTokenizer::Tokenize() {
             continue;
         }
 
-        if (c == '.' && i + 2 < content.size() && content[i + 1] == '.' && content[i + 2] == '.') {
-            addToken(TokenType::SymbolEllipsis, i, 3);
-            i += 3;
+        if (c == '.' && Peek(1) == '.' && Peek(2) == '.') {
+            AddToken(TokenType::SymbolEllipsis, it, 3);
+            Skip();
+            Skip();
+            Skip();
             continue;
         }
 
-        if (c == '-' && i + 1 < content.size() && content[i + 1] == '>') {
-            addToken(TokenType::SymbolArrow, i, 2);
-            i += 2;
+        if (c == '-' && Peek(1) == '>') {
+            AddToken(TokenType::SymbolArrow, it, 2);
+            Skip();
+            Skip();
             continue;
         }
 
         int sym_index = GetSymbol(c);
 
         if (sym_index != -1) {
-            addToken(TokenType::Symbols + sym_index, i, 1);
-            i++;
+            AddToken(TokenType::Symbols + sym_index, it, 1);
+            Skip();
             continue;
         }
 
-        if (c == '/' && i + 1 < content.size() && content[i + 1] == '/') {
-            while (i < content.size() && content[i] != '\n') {
-                i++;
+        if (c == '/' && Peek(1) == '/') {
+            Skip();
+            Skip();
+            while (IsNewLine(Peek())) {
+                Skip();
             }
             continue;
         }
@@ -192,88 +178,90 @@ void FileTokenizer::Tokenize() {
             bool found = false;
             int size = std::size(operators);
             for (int j = 0; j < size; j++) {
-                const char* op = operators[j];
-                size_t len = strlen(op);
-                if (content.compare(i, len, op) == 0) {
-                    addToken(TokenType::OperatorStrings + j, i, len);
-                    i += len;
+                auto& op = operators[j];
+                if (StringStartsWith(it, op)) {
+                    AddToken(TokenType::OperatorStrings + j, it, op.length());
+                    it += op.length();
                     found = true;
                     break;
                 }
             }
             if (!found) {
-                addToken(TokenType::OperatorChars + op_index, i, 1);
-                i++;
+                AddToken(TokenType::OperatorChars + op_index, it, 1);
+                Skip();
             }
+            continue;
+        }
+
+        if (c == '\'') {
             continue;
         }
 
         if (c == '"') {
             bool slash = false;
             bool has_format = false;
-            i++;
-            size_t start = i;
-            while (i < content.size()) {
-                char c2 = content[i];
-                i++;
-                if (c2 == '"' && !slash) {
+            Skip();
+            auto start = it;
+            utf8::utfchar32_t last{0};
+            while (!Over()) {
+                last = Next();
+                if (last == '"' && !slash) {
                     break;
                 }
-                if (c2 == '$' && !slash) {
-                    c2 = content[i];
-                    if (c2 == '{') {
-                        i++;
+                if (last == '$' && !slash) {
+                    last = Peek();
+                    if (last == '{') {
+                        Skip();
                         break;
                     }
-                    addToken(has_format ? TokenType::StringMiddle : TokenType::StringStart, start, i - start - 2);
+                    AddToken(has_format ? TokenType::StringMiddle : TokenType::StringStart, start, it - start - 2);
                     has_format = true;
-                    size_t id_index = i;
-                    while (i < content.size()) {
-                        i++;
-                        c2 = content[i];
-                        if (!IsIdentifierChar(c2)) break;
+                    auto id_index = it;
+                    while (!Over()) {
+                        Skip();
+                        last = Peek();
+                        if (!IsIdentifierChar(last)) break;
                     }
-                    addToken(TokenType::Identifier, id_index, i - id_index);
-                    start = i;
+                    AddToken(TokenType::Identifier, id_index, it - id_index);
+                    start = it;
                     continue;
                 }
-                if (c2 == '\\') {
+                if (last == '\\') {
                     slash = !slash;
                 } else slash = false;
             }
 
-            char c2 = content[i - 1];
-            if (!has_format && c2 == '"') {
-                addToken(TokenType::String, start, i - start - 1);
+            if (!has_format && last == '"') {
+                AddToken(TokenType::String, start, it - start - 1);
                 continue;
             }
 
-            if (c2 == '{') {
-                addToken(has_format ? TokenType::StringMiddle : TokenType::StringStart, start, i - start - 2);
+            if (last == '{') {
+                AddToken(has_format ? TokenType::StringMiddle : TokenType::StringStart, start, it - start - 2);
                 fstrings++;
             }
 
-            if (i >= content.size()) {
+            if (Over()) {
                 ThrowError("Unterminated string literal", start);
             }
         }
 
-        size_t start = i;
+        auto start = it;
 
-        while (i < content.size()) {
-            i++;
-            char c2 = content[i];
-            if (!IsIdentifierChar(c2) && !std::isdigit(c2)) break;
+        while (!Over()) {
+            Skip();
+            auto c2 = Peek();
+            if (!IsIdentifierChar(c2) && !IsDigit(c2)) break;
         }
 
-        size_t len = i - start;
-        if (len == 4 && content.compare(start, 4, "true") == 0) {
-            addToken(TokenType::Boolean, start, 4);
+        auto len = it - start;
+        if (len == TRUE_STRING.length() && StringStartsWith(start, TRUE_STRING)) {
+            AddToken(TokenType::Boolean, start, 4);
             continue;
         }
 
-        if (len == 5 && content.compare(start, 5, "false") == 0) {
-            addToken(TokenType::Boolean, start, 5);
+        if (len == FALSE_STRING.length() && StringStartsWith(start, FALSE_STRING)) {
+            AddToken(TokenType::Boolean, start, 5);
             continue;
         }
 
@@ -282,20 +270,20 @@ void FileTokenizer::Tokenize() {
             int size = std::size(keywords);
 
             for (int j = 0; j < size; j++) {
-                const char* kw = keywords[j];
-                if (len == strlen(kw) && content.compare(start, len, kw) == 0) {
-                    addToken(TokenType::Keywords + j, start, len);
+                auto& kw = keywords[j];
+                if (len == kw.length() && StringStartsWith(start, kw)) {
+                    AddToken(TokenType::Keywords + j, start, len);
                     is_keyword = true;
                     break;
                 }
             }
             if (!is_keyword) {
-                addToken(TokenType::Identifier, start, len);
+                AddToken(TokenType::Identifier, start, len);
             }
             continue;
         }
 
-        ThrowError("Unexpected character", i);
+        ThrowError("Unexpected character");
     }
 
     tokens.shrink_to_fit();

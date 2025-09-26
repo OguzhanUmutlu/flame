@@ -4,6 +4,7 @@ NoneNode = NoneNode
 Token = IdentifierToken
       | IntegerToken
       | FloatToken
+      | CharToken
       | StringToken
       | BooleanToken
       | StringStartToken
@@ -18,12 +19,13 @@ Token = IdentifierToken
 CallArgument = CallArgument(spread: bool, name: IdentifierToken | NoneNode, value: Expr)
 
 VariableIncDecExpr(type: ++x --x x++ x--, id: VariableExpr | PropertyExpr)
-CallExpr(callee: Expr, args: CallArgument[], typeArgs: TypeExpr[])
+CallExpr(callee: Expr, args: CallArgument[])
 UnaryExpr(operator: OperatorToken, right: Expr)
 BinaryExpr(left: Expr, operator: OperatorToken, right: Expr)
 LiteralExpr(
     value: IntegerToken
          | FloatToken
+         | CharToken
          | StringToken
          | BooleanToken
          | KeywordNullToken
@@ -51,8 +53,7 @@ LambdaExpr(
 )
 ScopeExpr(body: Stmt[])
 
-IdentifierTypeExpr(id: IdentifierToken, arguments: TypeExpr[])
-ArrayTypeExpr(elementType: TypeExpr, size: Expr | NoneNode)
+IdentifierTypeExpr(id: VariableExpr | PropertyExpr, arguments: TypeExpr[])
 OptionalTypeExpr(type: TypeExpr)
 FunctionTypeExpr(params: TypeExpr[], returnType: TypeExpr | NoneNode)
 
@@ -100,6 +101,7 @@ FunctionStmt(
 BinaryOpFunctionStmt(
     visibility: PropVisibility,
     id: VariableExpr | PropertyExpr,
+    generics: Generic[],
     params: Parameter[],
     returnType: TypeExpr | NoneNode,
     body: Stmt[]
@@ -107,6 +109,7 @@ BinaryOpFunctionStmt(
 UnaryOpFunctionStmt(
     visibility: PropVisibility,
     id: VariableExpr | PropertyExpr,
+    generics: Generic[],
     param: Parameter?,
     returnType: TypeExpr | NoneNode,
     body: Stmt[]
@@ -114,14 +117,13 @@ UnaryOpFunctionStmt(
 GetFunctionStmt(
     visibility: PropVisibility,
     id: VariableExpr | PropertyExpr,
-    param: Parameter?,
     returnType: TypeExpr | NoneNode,
     body: Stmt[]
 )
 SetFunctionStmt(
     visibility: PropVisibility,
     id: VariableExpr | PropertyExpr,
-    params: Parameter[],
+    params: Parameter?,
     body: Stmt[]
 )
 ClassStmt(

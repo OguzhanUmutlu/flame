@@ -22,9 +22,7 @@ int main(int argc, char* argv[]) {
 
     tokenizer.Tokenize(argv[1]);
 
-    // for (const auto& tok : tokenizer.files.begin()->second.tokens) {
-    //     std::cout << tok << std::endl;
-    // }
+    std::cout << tokenizer.files.begin()->second.tokens << std::endl;
 
     auto parser = Parser(arena, tokenizer);
     std::vector<ASTNode> statements;

@@ -28,10 +28,14 @@ var x: u32 = 10
 var x: u64 = 10
 var x: u128 = 10
 
-var x: _llint<1024> = 10 // llvm signed integer of size 1024, any size works.
-var x: _lluint<1024> = 10 // llvm unsigned integer of size 1024, any size works.
-var x: _llint<5> = 14 // even allows non-powers of 2, and even ones smaller than 8
-var x: _lluint<1> = 1 // either 0 or 1, acts like a boolean
+import llvm
+
+var x: llvm._types.int<1024> = 10 // llvm signed integer of size 1024, any size works.
+var x: llvm._types.uint<1024> = 10 // llvm unsigned integer of size 1024, any size works.
+var x: llvm._types.int<5> = 14 // even allows non-powers of 2, and even ones smaller than 8
+var x: llvm._types.uint<1> = 1 // either 0 or 1, acts like a boolean
+
+alias i1024 = llvm._types.int<1024>
 
 var x = SIMD<i32>(1, 2, 3, 4) // SIMD<iN | uN> where N is a positive integer
 
@@ -93,42 +97,42 @@ class Vec3 {
 }
 
 enum class SomeEnum {
-    A // defaults to indexing at 0
-    B // 1
+    A, // defaults to indexing at 0
+    B; // 1
 }
 
 enum class OtherEnum {
-    A = 5 // starts at 5
-    B // 6
-    C = 10 // can set manually
-    D // 11
+    A = 5,  // starts at 5
+    B,      // 6
+    C = 10, // can set manually
+    D;      // 11
 }
 
 enum class CharEnum {
-    A = 'a' // understands char values
-    B // 'b'
-    C // 'c'
-    D := 'y' // allows setting manually
-    E // 'e' // continues from last pattern
+    A = 'a',  // understands char values
+    B,        // 'b'
+    C,        // 'c'
+    D := 'y', // allows setting manually
+    E;        // 'e' // continues from last pattern
 }
 
 enum class StringEnum {
-    Hello = "Wello" // understands string values
-    World // "World"
-    Foo // "Foo"
-    Bar := "Baz" // allows setting manually
-    Qux // "Qux"
+    Hello = "Wello", // understands string values
+    World,           // "World"
+    Foo,             // "Foo"
+    Bar := "Baz",    // allows setting manually
+    Qux;             // "Qux"
 }
 
 enum class LowerEnum {
-    Hello = "hello" // understands lowercase string values
-    World // "world"
-    Foo // "foo"
-    Bar := "baz" // allows setting manually
-    Qux // "qux"
-    Plugh = "Plugh" // allows switching rules mid-enum
-    Xyzzy // "Xyzzy"
-    Thud // "Thud"
+    Hello = "hello", // understands lowercase string values
+    World,           // "world"
+    Foo,             // "foo"
+    Bar := "baz",    // allows setting manually
+    Qux,             // "qux"
+    Plugh = "Plugh", // allows switching rules mid-enum
+    Xyzzy,           // "Xyzzy"
+    Thud;            // "Thud"
 }
 
 fun std.hash(vec: Vec3) {
@@ -161,8 +165,6 @@ for (x in -10) { // same as -10:0
 
 while (x != 0) x--
 do x-- while (x != 0)
-
-alias i1024 = _llint<1024>
 
 class Duration : usize {
     fun get inSeconds() = this / 1000
@@ -203,7 +205,7 @@ fun addAsk(x: (int, int) -> int) {
   return x(2, 3)
 }
 
-five = addAsk(() -> { x, y -> x + y })
+five = addAsk((x, y) -> { x + y })
 
 fun doSomething(x: int = 10, y: int = 20) {
   println(x + y)

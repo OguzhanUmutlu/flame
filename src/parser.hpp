@@ -13,9 +13,11 @@ namespace Flame {
         VariableExpr, PropertyExpr, VariableIncDecExpr, CallExpr, UnaryExpr, BinaryExpr, LiteralExpr,
         FStringExpr, IndexExpr, TupleExpr, IfExpr, RangeExpr, LambdaExpr, ScopeExpr,
 
-        IdentifierTypeExpr, ArrayTypeExpr, OptionalTypeExpr, FunctionTypeExpr, ReferenceTypeExpr,
+        TypeExpressions,
+        IdentifierTypeExpr = TypeExpressions, ArrayTypeExpr, OptionalTypeExpr, FunctionTypeExpr, ReferenceTypeExpr,
 
-        ReturnStmt, BreakStmt, ContinueStmt, ExpressionStmt, ImportStmt, AliasStmt,
+        Statements,
+        ReturnStmt = Statements, BreakStmt, ContinueStmt, ExpressionStmt, ImportStmt, AliasStmt,
         VariableDefineStmt, IfStmt, ForStmt, FunctionStmt, GetFunctionStmt,
         SetFunctionStmt, WhileStmt, BinaryOpFunctionStmt, UnaryOpFunctionStmt,
         DoWhileStmt, ClassStmt
@@ -40,6 +42,10 @@ namespace Flame {
         template <typename T>
         [[nodiscard]] T& as() const {
             return *static_cast<T*>(ptr);
+        }
+
+        [[nodiscard]] constexpr bool isTypeExpr() const {
+            return type >= ASTNodeKind::TypeExpressions && type < ASTNodeKind::Statements;
         }
 
     private:
@@ -186,12 +192,10 @@ namespace Flame {
     struct CallExpr {
         ASTNode callee;
         std::vector<CallArgument> args;
-        std::vector<ASTNode> typeArgs;
 
         friend std::ostream& operator<<(std::ostream& os, const CallExpr& par) {
             os << "CallExpr(callee=" << par.callee
                 << ", args=" << par.args
-                << ", typeArgs=" << par.typeArgs
                 << ")";
             return os;
         }
@@ -320,7 +324,7 @@ namespace Flame {
 
 
     struct IdentifierTypeExpr {
-        IdentifierToken id;
+        ASTNode id;
         std::vector<ASTNode> arguments;
 
         friend std::ostream& operator<<(std::ostream& os, const IdentifierTypeExpr& par) {
@@ -411,7 +415,7 @@ namespace Flame {
     };
 
     struct ImportStmt {
-        bool star;
+        bool star{};
         ASTNode module;
         Opt<IdentifierToken> alias;
 
@@ -539,14 +543,12 @@ namespace Flame {
     struct GetFunctionStmt {
         PropVisibility visibility;
         ASTNode id;
-        std::optional<Parameter> param;
         ASTNode returns;
         std::vector<ASTNode> body;
 
         friend std::ostream& operator<<(std::ostream& os, const GetFunctionStmt& par) {
             os << "GetFunctionStmt(visibility=" << par.visibility
                 << ", id=" << par.id
-                << ", param=" << par.param
                 << ", returns=" << par.returns
                 << ", body=" << par.body
                 << ")";
@@ -557,13 +559,13 @@ namespace Flame {
     struct SetFunctionStmt {
         PropVisibility visibility;
         ASTNode id;
-        std::vector<Parameter> params;
+        std::optional<Parameter> param;
         std::vector<ASTNode> body;
 
         friend std::ostream& operator<<(std::ostream& os, const SetFunctionStmt& par) {
             os << "SetFunctionStmt(visibility=" << par.visibility
                 << ", id=" << par.id
-                << ", params=" << par.params
+                << ", param=" << par.param
                 << ", body=" << par.body
                 << ")";
             return os;
@@ -728,41 +730,45 @@ namespace Flame {
             : tokenizer(tokenizer), cur(tokenizer.files.begin()->second), arena(arena) {
         }
 
+        [[nodiscard]] constexpr size_t TokenCount() const {
+            return cur.tokens.size();
+        }
+
         [[nodiscard]] Token Get(size_t index) const {
-            if (index >= cur.tokens.size()) return {TokenType::EndOfFile, cur.content.end()._Ptr, 0};
+            if (index >= TokenCount()) return {TokenType::EndOfFile, cur._content.end()._Ptr, 0};
             return cur.tokens[index];
         }
 
         [[nodiscard]] Token Peek() const {
-            if (Over()) return {TokenType::EndOfFile, cur.content.end()._Ptr, 0};
+            if (Over()) return {TokenType::EndOfFile, cur._content.end()._Ptr, 0};
             return cur.tokens[current];
         }
 
         [[nodiscard]] Token PeekNoLine() const {
-            for (auto i = current; i < cur.tokens.size(); i++) {
+            for (auto i = current; i < TokenCount(); i++) {
                 if (cur.tokens[i].type != TokenType::NewLine) {
                     return cur.tokens[i];
                 }
             }
-            return {TokenType::EndOfFile, cur.content.end()._Ptr, 0};
+            return {TokenType::EndOfFile, cur._content.end()._Ptr, 0};
         }
 
         [[nodiscard]] Token Peek(int offset) const {
-            if (current + offset >= cur.tokens.size()) return {TokenType::EndOfFile, cur.content.end()._Ptr, 0};
+            if (current + offset >= TokenCount()) return {TokenType::EndOfFile, cur._content.end()._Ptr, 0};
             return cur.tokens[current + offset];
         }
 
         [[nodiscard]] Token PeekNoLine(int offset) const {
-            for (auto i = current + offset; i < cur.tokens.size(); i++) {
+            for (auto i = current + offset; i < TokenCount(); i++) {
                 if (cur.tokens[i].type != TokenType::NewLine) {
                     return cur.tokens[i];
                 }
             }
-            return {TokenType::EndOfFile, cur.content.end()._Ptr, 0};
+            return {TokenType::EndOfFile, cur._content.end()._Ptr, 0};
         }
 
         [[nodiscard]] Token Next() {
-            if (Over()) return {TokenType::EndOfFile, cur.content.end()._Ptr, 0};
+            if (Over()) return {TokenType::EndOfFile, cur._content.end()._Ptr, 0};
             return cur.tokens[current++];
         }
 
@@ -770,22 +776,16 @@ namespace Flame {
             if (Peek().type != type) {
                 ThrowError(
                     "Expected '" + GetTokenValue(type) + "', got '" +
-                    std::string(Peek().value) + "' which is a " + GetTokenTypeName(Peek().type), Peek()
+                    std::string(Peek().value) + (
+                        Peek().type <= TokenType::NewLine ? "'" : "' which is a " + GetTokenTypeName(Peek().type)
+                    ), Peek()
                 );
             }
             current++;
         }
 
-        void Expect(SymbolType type) {
-            return Expect(static_cast<TokenType>(type));
-        }
-
-        void Expect(OperatorType type) {
-            return Expect(static_cast<TokenType>(type));
-        }
-
         [[nodiscard]] bool Over() const {
-            return current >= cur.tokens.size();
+            return current >= TokenCount();
         }
 
         [[noreturn]] void ThrowError(const std::string& message) const {
@@ -801,10 +801,10 @@ namespace Flame {
         }
 
         [[noreturn]] void ThrowError(const std::string& message, size_t start, size_t length = 1) const {
-            cur.ThrowError(message, start, length);
+            cur.ThrowError(message, cur._content.data() + start, length);
         }
 
-        [[noreturn]] void ThrowError(const std::string& message, const ASTNode& node) const {
+        [[noreturn]] void ThrowError(const std::string& message, const ASTNode& node) {
             switch (node.type) {
             case ASTNodeKind::NONE:
                 throw std::runtime_error(message + " at NONE node");
@@ -885,9 +885,16 @@ namespace Flame {
 
         template <typename T, typename... Args>
         ASTNode CreateNode(ASTNodeKind type, Args&&... args) {
-            void* mem = arena.alloc<T>();
+            auto mem = arena.alloc<T>();
             new(mem) T(std::forward<Args>(args)...);
             return ASTNode{type, mem};
+        }
+
+        template <typename T, typename... Args>
+        std::pair<T&, ASTNode> CreateNodeDual(ASTNodeKind type, Args&&... args) {
+            auto mem = arena.alloc<T>();
+            new(mem) T(std::forward<Args>(args)...);
+            return std::pair(mem, ASTNode{type, mem});
         }
 
         void SkipNewLines() {
@@ -895,11 +902,10 @@ namespace Flame {
         }
 
         ASTNode ParseSingle();
-        ASTNode ParseExpr(int rbp = 0, bool endAtGt = false, bool ignoreNewLines = false);
-        void ParseExpressions(std::vector<ASTNode>& result, bool endAtGt = false, bool ignoreNewLines = false);
-        ASTNode ParseSingleTypeExpr(bool allowExpr = false);
-        ASTNode ParseTypeExpr(bool allowExpr = false);
-        void ParseTypeExpressions(std::vector<ASTNode>& result, bool allowExpr = false);
+        ASTNode ParseExpr(int rbp = 0, bool ignoreNewLines = false, bool endAtSet = false, bool endAtGt = false);
+        void ParseExpressions(std::vector<ASTNode>& result, bool ignoreNewLines = false);
+        ASTNode ParseTypeExpr(bool ignoreNewLines = false, bool endAtGt = false);
+        void ParseTypeExpressions(std::vector<ASTNode>& result);
         ASTNode ParsePropertyExpr(); // despite the name it might return VariableExpr
         ASTNode ParseStmt();
         void ParseBracedBlock(std::vector<ASTNode>& result);

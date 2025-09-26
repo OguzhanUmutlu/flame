@@ -70,7 +70,8 @@ int LeftBindingPower(OperatorType op) {
 ASTNode Parser::ParseSingle() {
     auto tok = Next();
 
-    if (tok.type == TokenType::Integer || tok.type == TokenType::Float || tok.type == TokenType::String) {
+    if (tok.type == TokenType::Integer || tok.type == TokenType::Float || tok.type == TokenType::Char
+        || tok.type == TokenType::String) {
         return CreateNode<LiteralExpr>(ASTNodeKind::LiteralExpr, tok);
     }
 
@@ -109,8 +110,8 @@ ASTNode Parser::ParseSingle() {
         size_t parEnd = 0;
         size_t parAmount = 0;
         // finding the matching right parenthesis
-        for (auto i = current; i < cur.tokens.size(); i++) {
-            auto curTok = cur.tokens[i];
+        for (auto i = current; i < TokenCount(); i++) {
+            auto curTok = Get(i);
             if (curTok.type == TokenType::SymbolLeftParenthesis) {
                 parAmount++;
             } else if (curTok.type == TokenType::SymbolRightParenthesis) {
@@ -131,8 +132,8 @@ ASTNode Parser::ParseSingle() {
 
         if (parEndTok.type == TokenType::SymbolColon) {
             parAmount = 0;
-            for (auto i = parEnd + 2; i < cur.tokens.size(); i++) {
-                auto curTok = cur.tokens[i];
+            for (auto i = parEnd + 2; i < TokenCount(); i++) {
+                auto curTok = Get(i);
                 if (
                     curTok.type == TokenType::SymbolLeftParenthesis
                     || curTok.type == TokenType::SymbolLeftBracket
@@ -175,7 +176,7 @@ ASTNode Parser::ParseSingle() {
                     }
                     if (Peek().type == TokenType::OperatorAssign) {
                         current++;
-                        default_ = ParseExpr(0, false, true);
+                        default_ = ParseExpr(0, true);
                     }
                     out.as<LambdaExpr>().params.emplace_back(tok2.comp<TokenType::Identifier>(), type, default_);
                     if (Peek().type == TokenType::SymbolComma) {
@@ -184,6 +185,8 @@ ASTNode Parser::ParseSingle() {
                         break;
                     }
                 }
+
+                out.as<LambdaExpr>().params.shrink_to_fit();
             }
 
             Expect(TokenType::SymbolRightParenthesis);
@@ -203,7 +206,7 @@ ASTNode Parser::ParseSingle() {
 
         if (Peek().type != TokenType::SymbolRightParenthesis) {
             while (true) {
-                auto out = ParseExpr(0, false, true);
+                auto out = ParseExpr(0, true);
 
                 if (Peek().type == TokenType::SymbolComma) {
                     current++;
@@ -217,6 +220,8 @@ ASTNode Parser::ParseSingle() {
 
                 elements.emplace_back(out);
             }
+
+            elements.shrink_to_fit();
         }
 
         Expect(TokenType::SymbolRightParenthesis);
@@ -248,12 +253,15 @@ ASTNode Parser::ParseSingle() {
                 continue;
             }
 
-            out.as<FStringExpr>().expressions.push_back(ParseExpr(0, false, true));
+            out.as<FStringExpr>().expressions.push_back(ParseExpr(0, true));
 
             if (Over()) {
                 ThrowError("Unterminated f-string", tok);
             }
         }
+
+        out.as<FStringExpr>().middles.shrink_to_fit();
+        out.as<FStringExpr>().expressions.shrink_to_fit();
     }
 
     if (tok.type == TokenType::KeywordIf) {
@@ -261,7 +269,7 @@ ASTNode Parser::ParseSingle() {
 
         auto out = CreateNode<IfExpr>(
             ASTNodeKind::IfExpr, tok,
-            ParseExpr(0, false, true), std::vector<ASTNode>(), std::vector<ASTNode>()
+            ParseExpr(0, true), std::vector<ASTNode>(), std::vector<ASTNode>()
         );
 
         Expect(TokenType::SymbolRightParenthesis);
@@ -286,24 +294,26 @@ ASTNode Parser::ParseSingle() {
     ThrowError("Unexpected token", tok);
 }
 
-ASTNode Parser::ParseExpr(int rbp, bool endAtGt, bool ignoreNewLines) {
+ASTNode Parser::ParseExpr(int rbp, bool ignoreNewLines, bool endAtSet, bool endAtGt) {
     if (ignoreNewLines) SkipNewLines();
     auto out = ParseSingle();
 
     while (!Over()) {
         auto tok = Peek();
-        if (tok.type == TokenType::NewLine && ignoreNewLines) {
+        if (ignoreNewLines && tok.type == TokenType::NewLine) {
             current++;
             continue;
         }
-        if (endAtGt && tok.type == TokenType::OperatorGt || tok.type == TokenType::OperatorGte) break;
+
+        if (endAtSet && tok.type == TokenType::OperatorAssign) break;
+        if (endAtGt && (tok.type == TokenType::OperatorGt || tok.type == TokenType::OperatorGte)) break;
 
         if (tok.type == TokenType::NewLine) {
             // Skip new lines where something like this happens:
             // obj
             // .property
-            for (auto i = current + 1; i < cur.tokens.size(); i++) {
-                auto tok2 = cur.tokens[i];
+            for (auto i = current + 1; i < TokenCount(); i++) {
+                auto tok2 = Get(i);
                 if (tok2.type == TokenType::NewLine) continue;
                 if (tok2.type == TokenType::SymbolDot) {
                     current = i;
@@ -338,18 +348,29 @@ ASTNode Parser::ParseExpr(int rbp, bool endAtGt, bool ignoreNewLines) {
             continue;
         }
 
-        bool foundTypeArgs = false;
 
         if (
             (out.type == ASTNodeKind::VariableExpr || out.type == ASTNodeKind::PropertyExpr)
             && tok.type == TokenType::OperatorLt
         ) {
-            for (auto i = current + 1; i < cur.tokens.size() - 1; i++) {
-                auto curTok = cur.tokens[i];
-                if (curTok.type == TokenType::OperatorGte) break;
-                if (curTok.type == TokenType::OperatorGt) {
-                    if (cur.tokens[i + 1].type != TokenType::SymbolLeftParenthesis) {
-                        ThrowError("Expected function call after type arguments", curTok);
+            bool foundTypeArgs = false;
+            for (auto i = current + 1; i < TokenCount(); i++) {
+                auto tok2 = Get(i);
+                if (tok2.type == TokenType::OperatorAssign && endAtSet) break;
+                if (tok2.type == TokenType::OperatorGte) {
+                    foundTypeArgs = endAtSet;
+                    break;
+                }
+                if (tok2.type == TokenType::OperatorGt) {
+                    auto next = Get(i + 1);
+                    if (
+                        next.type != TokenType::SymbolLeftParenthesis
+                        && next.type != TokenType::SymbolLeftBracket
+                        && next.type != TokenType::OperatorAssign
+                    ) {
+                        ThrowError(
+                            "Expected function call, array type notation or variable definition right after type arguments",
+                            tok2);
                     }
                     foundTypeArgs = true;
                     break;
@@ -357,22 +378,24 @@ ASTNode Parser::ParseExpr(int rbp, bool endAtGt, bool ignoreNewLines) {
             }
 
             if (foundTypeArgs) {
-                out = CreateNode<CallExpr>(ASTNodeKind::CallExpr, out, std::vector<CallArgument>(),
-                                           std::vector<ASTNode>());
+                out = CreateNode<IdentifierTypeExpr>(ASTNodeKind::IdentifierTypeExpr, out, std::vector<ASTNode>());
                 current++;
-                ParseTypeExpressions(out.as<CallExpr>().typeArgs, true);
-                Expect(TokenType::OperatorGt);
-                SkipNewLines();
-                tok = Peek();
+                ParseTypeExpressions(out.as<IdentifierTypeExpr>().arguments);
+                auto p = Next();
+                if (p.type != TokenType::OperatorGt && p.type != TokenType::OperatorGte) {
+                    ThrowError("Expected '>' after type arguments", p);
+                }
+                if (p.type == TokenType::OperatorGte) {
+                    current--;
+                    break;
+                }
+                continue;
             }
         }
 
         if (tok.type == TokenType::SymbolLeftParenthesis) {
             current++;
-            if (!foundTypeArgs) {
-                out = CreateNode<CallExpr>(ASTNodeKind::CallExpr, out, std::vector<CallArgument>(),
-                                           std::vector<ASTNode>());
-            }
+            out = CreateNode<CallExpr>(ASTNodeKind::CallExpr, out, std::vector<CallArgument>());
 
             SkipNewLines();
             if (Peek().type != TokenType::SymbolRightParenthesis) {
@@ -385,14 +408,14 @@ ASTNode Parser::ParseExpr(int rbp, bool endAtGt, bool ignoreNewLines) {
                         auto nameTok = Next();
                         SkipNewLines();
                         Expect(TokenType::SymbolColon);
-                        auto expr = ParseExpr(0, false, true);
+                        auto expr = ParseExpr(0, true);
                         out.as<CallExpr>().args.emplace_back(false, nameTok.comp<TokenType::Identifier>(), expr);
                     } else if (Peek().type == TokenType::SymbolEllipsis) {
                         current++;
-                        auto expr = ParseExpr(0, false, true);
+                        auto expr = ParseExpr(0, true);
                         out.as<CallExpr>().args.emplace_back(true, std::nullopt, expr);
                     } else {
-                        auto expr = ParseExpr(0, false, true);
+                        auto expr = ParseExpr(0, true);
                         out.as<CallExpr>().args.emplace_back(false, std::nullopt, expr);
                     }
 
@@ -400,6 +423,8 @@ ASTNode Parser::ParseExpr(int rbp, bool endAtGt, bool ignoreNewLines) {
                         current++;
                     } else break;
                 }
+
+                out.as<CallExpr>().args.shrink_to_fit();
             }
             SkipNewLines();
             Expect(TokenType::SymbolRightParenthesis);
@@ -409,7 +434,12 @@ ASTNode Parser::ParseExpr(int rbp, bool endAtGt, bool ignoreNewLines) {
         if (tok.type == TokenType::SymbolLeftBracket) {
             current++;
             SkipNewLines();
-            auto index = ParseExpr(0, false, true);
+            if (Peek().type == TokenType::SymbolRightBracket) {
+                current++;
+                out = CreateNode<IndexExpr>(ASTNodeKind::IndexExpr, out, noneNode);
+                continue;
+            }
+            auto index = ParseExpr(0, true);
             SkipNewLines();
             Expect(TokenType::SymbolRightBracket);
             out = CreateNode<IndexExpr>(ASTNodeKind::IndexExpr, out, index);
@@ -440,10 +470,11 @@ ASTNode Parser::ParseExpr(int rbp, bool endAtGt, bool ignoreNewLines) {
         case OperatorType::BitOr:
         case OperatorType::BitXor:
         case OperatorType::Shl:
-        case OperatorType::Shr: {
+        case OperatorType::Shr:
+        case OperatorType::MatMul: {
             SkipNewLines(); // after an operator we can have new lines
             out = CreateNode<BinaryExpr>(ASTNodeKind::BinaryExpr, out, tok.op(),
-                                         ParseExpr(lbp, endAtGt, ignoreNewLines));
+                                         ParseExpr(lbp, ignoreNewLines, endAtSet, endAtGt));
         }
         break;
         case OperatorType::Assign:
@@ -456,10 +487,11 @@ ASTNode Parser::ParseExpr(int rbp, bool endAtGt, bool ignoreNewLines) {
         case OperatorType::SetBitOr:
         case OperatorType::SetBitXor:
         case OperatorType::SetShl:
-        case OperatorType::SetShr: {
+        case OperatorType::SetShr:
+        case OperatorType::SetMatMul: {
             SkipNewLines(); // after an operator we can have new lines
             out = CreateNode<BinaryExpr>(ASTNodeKind::BinaryExpr, out, tok.op(),
-                                         ParseExpr(lbp - 1, endAtGt, ignoreNewLines));
+                                         ParseExpr(lbp - 1, ignoreNewLines, endAtSet, endAtGt));
         }
         break;
         case OperatorType::Inc:
@@ -484,46 +516,32 @@ ASTNode Parser::ParseExpr(int rbp, bool endAtGt, bool ignoreNewLines) {
     return out;
 }
 
-void Parser::ParseExpressions(std::vector<ASTNode>& result, bool endAtGt, bool ignoreNewLines) {
+void Parser::ParseExpressions(std::vector<ASTNode>& result, bool ignoreNewLines) {
     while (true) {
-        auto expr = ParseExpr(0, endAtGt, ignoreNewLines);
+        auto expr = ParseExpr(0, ignoreNewLines);
         result.push_back(expr);
 
         if (Peek().type == TokenType::SymbolComma) {
             current++;
         } else break;
     }
+
+    result.shrink_to_fit();
 }
 
-ASTNode Parser::ParseSingleTypeExpr(bool allowExpr) {
-    auto tok = Next();
-    if (tok.type == TokenType::OperatorBitAnd) {
-        return CreateNode<ReferenceTypeExpr>(ASTNodeKind::ReferenceTypeExpr, ParseTypeExpr());
-    }
+ASTNode Parser::ParseTypeExpr(bool ignoreNewLines, bool endAtGt) {
+    auto tok = Peek();
 
-    if (tok.type == TokenType::Identifier) {
-        auto out = CreateNode<IdentifierTypeExpr>(
-            ASTNodeKind::IdentifierTypeExpr, IdentifierToken{tok.value}, std::vector<ASTNode>()
-        );
-        if (Peek().type == TokenType::OperatorLt) {
-            current++;
-            ParseTypeExpressions(out.as<IdentifierTypeExpr>().arguments, true);
-            auto n = Peek();
-            if (n.type != TokenType::OperatorGt && n.type != TokenType::OperatorGte) {
-                ThrowError("Expected '>' to close generic type arguments", n);
-            }
-            if (n.type == TokenType::OperatorGt) {
-                current++;
-            }
-        }
-        return out;
+    if (tok.type == TokenType::OperatorBitAnd) {
+        current++;
+        return CreateNode<ReferenceTypeExpr>(ASTNodeKind::ReferenceTypeExpr, ParseTypeExpr());
     }
 
     if (tok.type == TokenType::SymbolLeftParenthesis) {
         size_t parAmount = 0;
         bool lambdaSure = false;
-        for (auto i = current + 1; i < cur.tokens.size(); i++) {
-            auto curTok = cur.tokens[i];
+        for (auto i = current + 1; i < TokenCount(); i++) {
+            auto curTok = Get(i);
             if (curTok.type == TokenType::SymbolLeftParenthesis) {
                 parAmount++;
             } else if (curTok.type == TokenType::SymbolRightParenthesis) {
@@ -536,11 +554,13 @@ ASTNode Parser::ParseSingleTypeExpr(bool allowExpr) {
         }
 
         if (lambdaSure) {
+            current++;
             Expect(TokenType::SymbolLeftParenthesis);
 
-            std::vector<ASTNode> params;
+            auto out = CreateNode<FunctionTypeExpr>(ASTNodeKind::FunctionTypeExpr, std::vector<ASTNode>(), noneNode);
+
             if (Peek().type != TokenType::SymbolRightParenthesis) {
-                ParseTypeExpressions(params);
+                ParseTypeExpressions(out.as<FunctionTypeExpr>().params);
             }
 
             Expect(TokenType::SymbolRightParenthesis);
@@ -548,52 +568,26 @@ ASTNode Parser::ParseSingleTypeExpr(bool allowExpr) {
             Expect(TokenType::SymbolArrow);
             SkipNewLines();
 
-            auto returnType = ParseTypeExpr();
+            out.as<FunctionTypeExpr>().returns = ParseTypeExpr(true);
 
-            return CreateNode<FunctionTypeExpr>(ASTNodeKind::FunctionTypeExpr, std::move(params), returnType);
+            return out;
         }
         current++;
         SkipNewLines();
-        auto type = ParseTypeExpr();
+        auto type = ParseExpr(0, true);
         SkipNewLines();
         Expect(TokenType::SymbolRightParenthesis);
         SkipNewLines();
         return type;
     }
 
-    ThrowError("Expected a type", tok);
+    return ParseExpr(0, ignoreNewLines, true, endAtGt);
 }
 
-ASTNode Parser::ParseTypeExpr(bool allowExpr) {
-    auto out = ParseSingleTypeExpr(allowExpr);
-
-    while (true) {
-        auto tok = Peek();
-        if (tok.type == TokenType::SymbolLeftBracket) {
-            current++;
-            SkipNewLines();
-            if (Peek().type == TokenType::SymbolRightBracket) {
-                current++;
-                out = CreateNode<ArrayTypeExpr>(ASTNodeKind::ArrayTypeExpr, out, noneNode);
-                continue;
-            }
-            auto size = ParseExpr(0, false, true);
-            SkipNewLines();
-            Expect(TokenType::SymbolRightBracket);
-            out = CreateNode<ArrayTypeExpr>(ASTNodeKind::ArrayTypeExpr, out, size);
-            continue;
-        }
-
-        break;
-    }
-
-    return out;
-}
-
-void Parser::ParseTypeExpressions(std::vector<ASTNode>& result, bool allowExpr) {
+void Parser::ParseTypeExpressions(std::vector<ASTNode>& result) {
     SkipNewLines();
     while (true) {
-        auto type = ParseTypeExpr(allowExpr);
+        auto type = ParseTypeExpr(true, true);
         SkipNewLines();
         result.push_back(type);
 
@@ -601,6 +595,8 @@ void Parser::ParseTypeExpressions(std::vector<ASTNode>& result, bool allowExpr) 
             current++;
         } else break;
     }
+
+    result.shrink_to_fit();
 }
 
 // despite the name it might return VariableExpr
@@ -687,6 +683,9 @@ ASTNode Parser::ParseStmt() {
                 current++;
             } else break;
         }
+
+        out.as<ForStmt>().identifiers.shrink_to_fit();
+
         SkipNewLines();
         Expect(TokenType::KeywordIn);
         SkipNewLines();
@@ -709,7 +708,7 @@ ASTNode Parser::ParseStmt() {
         Expect(TokenType::SymbolLeftParenthesis);
         auto out = CreateNode<WhileStmt>(
             ASTNodeKind::WhileStmt,
-            ParseExpr(0, false, true), std::vector<ASTNode>(), std::vector<ASTNode>()
+            ParseExpr(0, true), std::vector<ASTNode>(), std::vector<ASTNode>()
         );
         SkipNewLines();
         Expect(TokenType::SymbolRightParenthesis);
@@ -735,7 +734,7 @@ ASTNode Parser::ParseStmt() {
         Expect(TokenType::KeywordWhile);
         SkipNewLines();
         Expect(TokenType::SymbolLeftParenthesis);
-        out.as<DoWhileStmt>().condition = ParseExpr(0, false, true);
+        out.as<DoWhileStmt>().condition = ParseExpr(0, true);
         SkipNewLines();
         Expect(TokenType::SymbolRightParenthesis);
         SkipNewLines();
@@ -780,6 +779,9 @@ ASTNode Parser::ParseStmt() {
         return CreateNode<ImportStmt>(ASTNodeKind::ImportStmt, false, id, aliasTok.comp<TokenType::Identifier>());
     }
 
+    if (tok.type == TokenType::KeywordFun) {
+    }
+
     current--;
     return CreateNode<ExpressionStmt>(ASTNodeKind::ExpressionStmt, ParseExpr());
 };
@@ -795,6 +797,8 @@ void Parser::ParseBracedBlock(std::vector<ASTNode>& result) {
     } else {
         result.push_back(ParseStmt());
     }
+
+    result.shrink_to_fit();
 }
 
 void Parser::ParseStatements(std::vector<ASTNode>& result) {
@@ -808,4 +812,6 @@ void Parser::ParseStatements(std::vector<ASTNode>& result) {
         auto stmt = ParseStmt();
         result.push_back(stmt);
     }
+
+    result.shrink_to_fit();
 };
