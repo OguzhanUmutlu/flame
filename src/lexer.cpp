@@ -1,47 +1,38 @@
 #include "lexer.hpp"
 #include "utfcpp/utf8.h"
 
-#include <cstring>
-
 using namespace Flame;
 
-constexpr char charOperators[] = {
-    '=', '+', '-', '*', '/', '%', '!', '<', '>', '&', '|', '^', '~', '@'
-};
-const std::string operators[] = {
-    "<<=", ">>=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "@=",
-    "==", "!=", "<=", ">=", "&&", "||", "++", "--", "<<", ">>"
-};
-constexpr char symbols[] = {
-    '(', ')', '{', '}', '[', ']', ',', ':', '.', '?'
-};
-const std::string keywords[] = {
-    "if", "else", "while", "for", "return", "fun", "class",
-    "import", "var", "val", "break", "continue", "when", "try",
-    "catch", "finally", "throw", "get", "set", "default", "delete",
-    "in", "as", "do", "alias", "enum"
-};
+namespace Flame {
+    std::ostream& operator<<(std::ostream& os, OperatorType op) {
+        return os << operators[static_cast<int>(op) - static_cast<int>(TokenType::Operators)];
+    }
 
-const std::string TRUE_STRING = "true";
-const std::string FALSE_STRING = "false";
+    std::ostream& operator<<(std::ostream& os, SymbolType op) {
+        return os << symbols[static_cast<int>(op) - static_cast<int>(TokenType::Symbols)];
+    }
+}
 
 std::string Flame::GetTokenValue(TokenType type) {
     if (type <= TokenType::NewLine) return GetTokenTypeName(type);
-    if (type >= TokenType::Keywords && type < TokenType::OperatorChars) {
+    if (type < TokenType::KeywordsEnd) {
         return keywords[static_cast<int>(type) - static_cast<int>(TokenType::Keywords)];
     }
-    if (type >= TokenType::OperatorChars && type < TokenType::OperatorStrings) {
-        return std::string{charOperators[static_cast<int>(type) - static_cast<int>(TokenType::OperatorChars)]};
-    }
-    if (type >= TokenType::OperatorStrings && type < TokenType::Symbols) {
-        return operators[static_cast<int>(type) - static_cast<int>(TokenType::OperatorStrings)];
+    if (type <= TokenType::OperatorsEnd) {
+        return operators[static_cast<int>(type) - static_cast<int>(TokenType::Operators)];
     }
     return std::string{symbols[static_cast<int>(type) - static_cast<int>(TokenType::Symbols)]};
 }
 
-[[nodiscard]] constexpr int GetOperator(utf8::utfchar32_t c) {
-    int size = std::size(charOperators);
-    for (int i = 0; i < size; i++) if (c == charOperators[i]) return i;
+[[nodiscard]] constexpr bool IsOperatorChar(utf8::utfchar32_t c) {
+    int size = std::size(operators);
+    for (int i = 0; i < size; i++) if (c == operators[i][0]) return true;
+    return false;
+}
+
+[[nodiscard]] constexpr int FileTokenizer::GetOperator() const {
+    int size = std::size(operators);
+    for (int j = 0; j < size; j++) if (StringStartsWith(it, operators[j])) return j;
     return -1;
 }
 
@@ -52,7 +43,7 @@ std::string Flame::GetTokenValue(TokenType type) {
 }
 
 [[nodiscard]] constexpr bool IsIdentifierChar(utf8::utfchar32_t c) {
-    return GetSymbol(c) == -1 && GetOperator(c) == -1 && !IsSpace(c);
+    return GetSymbol(c) == -1 && !IsOperatorChar(c) && !IsSpace(c) && !IsNewLine(c) && c != ';';
 }
 
 TokenType operator+(TokenType lhs, int rhs) {
@@ -155,6 +146,13 @@ void FileTokenizer::Tokenize() {
             continue;
         }
 
+        if (c == ':' && Peek(1) == '=') {
+            AddToken(TokenType::SymbolWalrus, it, 2);
+            Skip();
+            Skip();
+            continue;
+        }
+
         int sym_index = GetSymbol(c);
 
         if (sym_index != -1) {
@@ -172,24 +170,12 @@ void FileTokenizer::Tokenize() {
             continue;
         }
 
-        int op_index = GetOperator(c);
+        int op_index = GetOperator();
 
         if (op_index != -1) {
-            bool found = false;
-            int size = std::size(operators);
-            for (int j = 0; j < size; j++) {
-                auto& op = operators[j];
-                if (StringStartsWith(it, op)) {
-                    AddToken(TokenType::OperatorStrings + j, it, op.length());
-                    it += op.length();
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                AddToken(TokenType::OperatorChars + op_index, it, 1);
-                Skip();
-            }
+            auto& op = operators[op_index];
+            AddToken(TokenType::Operators + op_index, it, op.length());
+            it += op.length();
             continue;
         }
 
@@ -255,15 +241,6 @@ void FileTokenizer::Tokenize() {
         }
 
         auto len = it - start;
-        if (len == TRUE_STRING.length() && StringStartsWith(start, TRUE_STRING)) {
-            AddToken(TokenType::Boolean, start, 4);
-            continue;
-        }
-
-        if (len == FALSE_STRING.length() && StringStartsWith(start, FALSE_STRING)) {
-            AddToken(TokenType::Boolean, start, 5);
-            continue;
-        }
 
         if (len > 0) {
             bool is_keyword = false;

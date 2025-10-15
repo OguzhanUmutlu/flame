@@ -3,61 +3,105 @@
 #include <variant>
 
 #include "arena.hpp"
-#include "../.old/arena_vec_hpp_old"
 #include "lexer.hpp"
 #include "utils.hpp"
 
+#define PARAM(type, name) type name
+#define INIT(name) name(name)
+
+#define COTR1(struct_name, m1) \
+struct_name() = default; \
+struct_name(PARAM m1) : INIT(GET_NAME m1) {}
+
+#define COTR2(struct_name, m1, m2) \
+COTR1(struct_name, m1) \
+struct_name(PARAM m1, PARAM m2) : INIT(GET_NAME m1), INIT(GET_NAME m2) {}
+
+#define COTR3(struct_name, m1, m2, m3) \
+COTR2(struct_name, m1, m2) \
+struct_name(PARAM m1, PARAM m2, PARAM m3) : INIT(GET_NAME m1), INIT(GET_NAME m2), INIT(GET_NAME m3) {}
+
+#define COTR4(struct_name, m1, m2, m3, m4) \
+COTR3(struct_name, m1, m2, m3) \
+struct_name(PARAM m1, PARAM m2, PARAM m3, PARAM m4) \
+: INIT(GET_NAME m1), INIT(GET_NAME m2), INIT(GET_NAME m3), INIT(GET_NAME m4) {}
+
+#define COTR5(struct_name, m1, m2, m3, m4, m5) \
+COTR4(struct_name, m1, m2, m3, m4) \
+struct_name(PARAM m1, PARAM m2, PARAM m3, PARAM m4, PARAM m5) \
+: INIT(GET_NAME m1), INIT(GET_NAME m2), INIT(GET_NAME m3), INIT(GET_NAME m4), INIT(GET_NAME m5) {}
+
+#define COTR6(struct_name, m1, m2, m3, m4, m5, m6) \
+COTR5(struct_name, m1, m2, m3, m4, m5) \
+struct_name(PARAM m1, PARAM m2, PARAM m3, PARAM m4, PARAM m5, PARAM m6) \
+: INIT(GET_NAME m1), INIT(GET_NAME m2), INIT(GET_NAME m3), INIT(GET_NAME m4), INIT(GET_NAME m5), INIT(GET_NAME m6) {}
+
+#define COTR7(struct_name, m1, m2, m3, m4, m5, m6, m7) \
+COTR6(struct_name, m1, m2, m3, m4, m5, m6) \
+struct_name(PARAM m1, PARAM m2, PARAM m3, PARAM m4, PARAM m5, PARAM m6, PARAM m7) \
+: INIT(GET_NAME m1), INIT(GET_NAME m2), INIT(GET_NAME m3), INIT(GET_NAME m4), INIT(GET_NAME m5), INIT(GET_NAME m6), INIT(GET_NAME m7) {}
+
+#define COTR8(struct_name, m1, m2, m3, m4, m5, m6, m7, m8) \
+COTR7(struct_name, m1, m2, m3, m4, m5, m6, m7) \
+struct_name(PARAM m1, PARAM m2, PARAM m3, PARAM m4, PARAM m5, PARAM m6, PARAM m7, PARAM m8) \
+: INIT(GET_NAME m1), INIT(GET_NAME m2), INIT(GET_NAME m3), INIT(GET_NAME m4), INIT(GET_NAME m5), INIT(GET_NAME m6), INIT(GET_NAME m7), INIT(GET_NAME m8) {}
+
+#define GET_NAME(type, name) name
+
+#define PP_NARG(...) PP_NARG_(__VA_ARGS__, 8,7,6,5,4,3,2,1,0)
+#define PP_NARG_(_1,_2,_3,_4,_5,_6,_7,_8,N,...) N
+
+#define CONCAT(a, b) CONCAT_(a, b)
+#define CONCAT_(a, b) a##b
+
+#define COTR(struct_name, ...) CONCAT(COTR, PP_NARG(__VA_ARGS__))(struct_name, __VA_ARGS__)
+
 namespace Flame {
-    enum class ASTNodeKind : uint8_t {
-        NONE,
-        VariableExpr, PropertyExpr, VariableIncDecExpr, CallExpr, UnaryExpr, BinaryExpr, LiteralExpr,
-        FStringExpr, IndexExpr, TupleExpr, IfExpr, RangeExpr, LambdaExpr, ScopeExpr,
-
-        TypeExpressions,
-        IdentifierTypeExpr = TypeExpressions, ArrayTypeExpr, OptionalTypeExpr, FunctionTypeExpr, ReferenceTypeExpr,
-
-        Statements,
-        ReturnStmt = Statements, BreakStmt, ContinueStmt, ExpressionStmt, ImportStmt, AliasStmt,
-        VariableDefineStmt, IfStmt, ForStmt, FunctionStmt, GetFunctionStmt,
-        SetFunctionStmt, WhileStmt, BinaryOpFunctionStmt, UnaryOpFunctionStmt,
-        DoWhileStmt, ClassStmt
-    };
-
     struct ASTNode {
-        ASTNodeKind type;
-
-        ASTNode() : type(ASTNodeKind::NONE), ptr(nullptr) {
-        };
-
-        ASTNode(ASTNodeKind type, void* ptr) : type(type), ptr(ptr) {
-        };
-
         template <typename T, typename... Args>
-        static ASTNode create(Arena& arena, ASTNodeKind type, Args&&... args) {
+        static auto Create(Arena& arena, Args&&... args) {
             auto mem = arena.alloc<T>();
-            new(mem) T(std::forward<Args>(args)...);
-            return ASTNode{type, mem};
+            if constexpr (std::is_aggregate_v<T>) {
+                new(mem) T{std::forward<Args>(args)...};
+            } else {
+                new(mem) T(std::forward<Args>(args)...);
+            }
+            return mem;
         }
 
         template <typename T>
-        [[nodiscard]] T& as() const {
-            return *static_cast<T*>(ptr);
+        [[nodiscard]] bool Is() const {
+            return dynamic_cast<const T*>(this) != nullptr;
         }
 
-        [[nodiscard]] constexpr bool isTypeExpr() const {
-            return type >= ASTNodeKind::TypeExpressions && type < ASTNodeKind::Statements;
+        virtual void Print(std::ostream& os) const = 0;
+        [[nodiscard]] virtual constexpr TokenImpl GetToken() const = 0;
+        virtual ~ASTNode() = default;
+
+        friend std::ostream& operator<<(std::ostream& os, const ASTNode& node) {
+            node.Print(os);
+            return os;
         }
 
-    private:
-        void* ptr;
+        friend std::ostream& operator<<(std::ostream& os, const ASTNode* node) {
+            node->Print(os);
+            return os;
+        }
     };
 
-    std::ostream& operator<<(std::ostream& os, const ASTNode& node);
+    struct Expr : ASTNode {
+    };
+
+    struct TypeExpr : ASTNode {
+    };
+
+    struct Stmt : ASTNode {
+    };
 
     struct Parameter {
         IdentifierToken id;
-        ASTNode type;
-        ASTNode default_;
+        ASTNode* type;
+        ASTNode* default_;
 
         friend std::ostream& operator<<(std::ostream& os, const Parameter& par) {
             os << "Parameter(id=" << par.id
@@ -68,20 +112,10 @@ namespace Flame {
         }
     };
 
-    struct GenericParameter {
-        IdentifierToken id;
-        ASTNode constraint;
-
-        friend std::ostream& operator<<(std::ostream& os, const GenericParameter& par) {
-            os << "GenericParameter(id=" << par.id << ", constraint=" << par.constraint << ")";
-            return os;
-        }
-    };
-
     struct EnumMember {
-        bool manual{};
+        bool manual;
         IdentifierToken id;
-        ASTNode value;
+        ASTNode* value;
 
         friend std::ostream& operator<<(std::ostream& os, const EnumMember& mem) {
             os << "EnumMember(manual=" << (mem.manual ? "true" : "false")
@@ -95,21 +129,35 @@ namespace Flame {
     struct CallArgument {
         bool spread;
         std::optional<IdentifierToken> name;
-        ASTNode value;
+        ASTNode* value;
 
-        friend std::ostream& operator<<(std::ostream& os, const CallArgument& par) {
-            os << "CallArgument(spread=" << (par.spread ? "true" : "false")
-                << ", name=" << par.name
-                << ", value=" << par.value
+        friend std::ostream& operator<<(std::ostream& os, const CallArgument& arg) {
+            os << "CallArgument(spread=" << (arg.spread ? "true" : "false")
+                << ", name=" << arg.name
+                << ", value=" << arg.value
+                << ")";
+            return os;
+        }
+    };
+
+    struct Generic {
+        IdentifierToken id;
+        ASTNode* constraint;
+        ASTNode* default_;
+
+        friend std::ostream& operator<<(std::ostream& os, const Generic& gen) {
+            os << "Generic(id=" << gen.id
+                << ", constraint=" << gen.constraint
+                << ", default=" << gen.default_
                 << ")";
             return os;
         }
     };
 
     enum class PropVisibility {
-        Public    = 1,
-        Protected = 2,
-        Private   = 4
+        Public,
+        Protected,
+        Private
     };
 
     static std::ostream& operator<<(std::ostream& os, PropVisibility par) {
@@ -127,34 +175,47 @@ namespace Flame {
         return os;
     }
 
-    struct NoneNode {
-        friend std::ostream& operator<<(std::ostream& os, const NoneNode& par) {
+    struct NoneNode final : ASTNode {
+        void Print(std::ostream& os) const override {
             os << "NONE";
-            return os;
+        }
+
+        constexpr TokenImpl GetToken() const override {
+            return TokenImpl{};
         }
     };
 
 
-    struct VariableExpr {
+    struct VariableExpr final : Expr {
         IdentifierToken name;
 
-        friend std::ostream& operator<<(std::ostream& os, const VariableExpr& par) {
-            os << "VariableExpr(" << par.name << ")";
-            return os;
+        COTR1(VariableExpr, (IdentifierToken, name));
+
+        void Print(std::ostream& os) const override {
+            os << "VariableExpr(" << name << ")";
+        }
+
+        constexpr TokenImpl GetToken() const override {
+            return name;
         }
     };
 
-    struct PropertyExpr {
-        ASTNode callee;
+    struct PropertyExpr final : Expr {
+        ASTNode* callee;
         IdentifierToken id;
 
-        friend std::ostream& operator<<(std::ostream& os, const PropertyExpr& par) {
-            os << "PropertyExpr(" << par.callee << ", " << par.id << ")";
-            return os;
+        COTR2(PropertyExpr, (ASTNode*, callee), (IdentifierToken, id));
+
+        void Print(std::ostream& os) const override {
+            os << "PropertyExpr(" << callee << ", " << id << ")";
+        }
+
+        constexpr TokenImpl GetToken() const override {
+            return callee->GetToken();
         }
     };
 
-    struct VariableIncDecExpr {
+    struct VariableIncDecExpr final : Expr {
         enum class Type {
             IncLeft,
             IncRight,
@@ -162,560 +223,670 @@ namespace Flame {
             DecRight
         };
 
-        Type type{};
-        ASTNode var;
+        Type type;
+        ASTNode* var;
 
-        friend std::ostream& operator<<(std::ostream& os, const VariableIncDecExpr& par) {
+        COTR2(VariableIncDecExpr, (Type, type), (ASTNode*, var));
+
+        void Print(std::ostream& os) const override {
             os << "VariableIncDecExpr(";
-            switch (par.type) {
+            switch (type) {
             case Type::IncLeft:
                 os << "++";
-                os << ", " << par.var << ")";
+                os << ", " << var << ")";
                 break;
             case Type::IncRight:
-                os << par.var;
+                os << var;
                 os << ", ++)";
                 break;
             case Type::DecLeft:
                 os << "--";
-                os << ", " << par.var << ")";
+                os << ", " << var << ")";
                 break;
             case Type::DecRight:
-                os << par.var;
+                os << var;
                 os << ", --)";
                 break;
             }
-            return os;
+        }
+
+        constexpr TokenImpl GetToken() const override {
+            return var->GetToken();
         }
     };
 
-    struct CallExpr {
-        ASTNode callee;
+    struct CallExpr final : Expr {
+        ASTNode* callee;
         std::vector<CallArgument> args;
 
-        friend std::ostream& operator<<(std::ostream& os, const CallExpr& par) {
-            os << "CallExpr(callee=" << par.callee
-                << ", args=" << par.args
+        COTR2(CallExpr, (ASTNode*, callee), (std::vector<CallArgument>, args));
+
+        void Print(std::ostream& os) const override {
+            os << "CallExpr(callee=" << callee
+                << ", args=" << args
                 << ")";
-            return os;
+        }
+
+        constexpr TokenImpl GetToken() const override {
+            return callee->GetToken();
         }
     };
 
-    struct UnaryExpr {
+    struct UnaryExpr final : Expr {
         OperatorToken op;
-        ASTNode expr;
+        ASTNode* expr;
 
-        friend std::ostream& operator<<(std::ostream& os, const UnaryExpr& par) {
-            os << "UnaryExpr(" << par.op << ", " << par.expr << ")";
-            return os;
+        COTR2(UnaryExpr, (OperatorToken, op), (ASTNode*, expr));
+
+        void Print(std::ostream& os) const override {
+            os << "UnaryExpr(" << op << ", " << expr << ")";
+        }
+
+        constexpr TokenImpl GetToken() const override {
+            return op.Impl();
         }
     };
 
-    struct BinaryExpr {
-        ASTNode left;
+    struct BinaryExpr final : Expr {
+        ASTNode* left;
         OperatorToken op;
-        ASTNode right;
+        ASTNode* right;
 
-        friend std::ostream& operator<<(std::ostream& os, const BinaryExpr& par) {
-            os << "BinaryExpr(" << par.left << ", " << par.op << ", " << par.right << ")";
-            return os;
+        COTR3(BinaryExpr, (ASTNode*, left), (OperatorToken, op), (ASTNode*, right));
+
+        void Print(std::ostream& os) const override {
+            os << "BinaryExpr(" << left << ", " << op << ", " << right << ")";
+        }
+
+        constexpr TokenImpl GetToken() const override {
+            return left->GetToken();
         }
     };
 
-    struct LiteralExpr {
+    struct LiteralExpr final : Expr {
         Token value; // IntegerToken | FloatToken | StringToken | BooleanToken | KeywordNullToken
 
-        friend std::ostream& operator<<(std::ostream& os, const LiteralExpr& par) {
-            os << "Literal(" << par.value << ")";
-            return os;
+        COTR1(LiteralExpr, (Token, value));
+
+        void Print(std::ostream& os) const override {
+            os << "Literal(" << value << ")";
+        }
+
+        constexpr TokenImpl GetToken() const override {
+            return value.Impl();
         }
     };
 
-    struct FStringExpr {
+    struct FStringExpr final : Expr {
         StringStartToken start;
-        std::vector<ASTNode> expressions;
+        std::vector<ASTNode*> expressions;
         std::vector<StringMiddleToken> middles;
         StringEndToken end;
 
-        friend std::ostream& operator<<(std::ostream& os, const FStringExpr& par) {
-            os << "FStringExpr(start=" << par.start
-                << ", expressions=" << par.expressions
-                << ", middles=" << par.middles
-                << ", end=" << par.end
+        COTR4(FStringExpr, (StringStartToken, start), (std::vector<ASTNode*>, expressions),
+              (std::vector<StringMiddleToken>, middles), (StringEndToken, end));
+
+        void Print(std::ostream& os) const override {
+            os << "FStringExpr(start=" << start
+                << ", expressions=" << expressions
+                << ", middles=" << middles
+                << ", end=" << end
                 << ")";
-            return os;
+        }
+
+        constexpr TokenImpl GetToken() const override {
+            return start;
         }
     };
 
-    struct IndexExpr {
-        ASTNode callee;
-        ASTNode index;
+    struct IndexExpr final : Expr {
+        ASTNode* callee;
+        ASTNode* index;
 
-        friend std::ostream& operator<<(std::ostream& os, const IndexExpr& par) {
-            os << "IndexExpr(callee=" << par.callee
-                << ", index=" << par.index << ")";
-            return os;
+        COTR2(IndexExpr, (ASTNode*, callee), (ASTNode*, index));
+
+        void Print(std::ostream& os) const override {
+            os << "IndexExpr(callee=" << callee
+                << ", index=" << index << ")";
+        }
+
+        constexpr TokenImpl GetToken() const override {
+            return callee->GetToken();
         }
     };
 
-    struct TupleExpr {
-        Token leftPar;
-        std::vector<ASTNode> elements;
+    struct TupleExpr final : Expr {
+        TokenComp<TokenType::SymbolLeftParenthesis> leftPar;
+        std::vector<ASTNode*> elements;
 
-        friend std::ostream& operator<<(std::ostream& os, const TupleExpr& par) {
+        COTR2(TupleExpr, (TokenComp<TokenType::SymbolLeftParenthesis>, leftPar), (std::vector<ASTNode*>, elements));
+
+        void Print(std::ostream& os) const override {
             os << "TupleExpr("
-                << par.elements
+                << elements
                 << ")";
-            return os;
+        }
+
+        constexpr TokenImpl GetToken() const override {
+            return leftPar.Impl();
         }
     };
 
-    struct IfExpr {
-        Token ifToken;
-        ASTNode condition;
-        std::vector<ASTNode> body;
-        std::vector<ASTNode> elseBody;
+    struct IfExpr final : Expr {
+        TokenComp<TokenType::KeywordIf> ifToken;
+        ASTNode* condition;
+        std::vector<ASTNode*> body;
+        std::vector<ASTNode*> elseBody;
 
-        friend std::ostream& operator<<(std::ostream& os, const IfExpr& par) {
-            os << "IfExpr(condition=" << par.condition
-                << ", body=" << par.body
-                << ", elseBody=" << par.elseBody
+        COTR4(IfExpr, (TokenComp<TokenType::KeywordIf>, ifToken), (ASTNode*, condition), (std::vector<ASTNode*>, body),
+              (std::vector<ASTNode*>, elseBody));
+
+        void Print(std::ostream& os) const override {
+            os << "IfExpr(condition=" << condition
+                << ", body=" << body
+                << ", elseBody=" << elseBody
                 << ")";
-            return os;
+        }
+
+        constexpr TokenImpl GetToken() const override {
+            return ifToken.Impl();
         }
     };
 
-    struct RangeExpr {
-        ASTNode start;
-        ASTNode end;
-        ASTNode step;
+    struct RangeExpr final : Expr {
+        ASTNode* start;
+        ASTNode* end;
+        ASTNode* step;
 
-        friend std::ostream& operator<<(std::ostream& os, const RangeExpr& par) {
-            os << "RangeExpr(start=" << par.start
-                << ", end=" << par.end
-                << ", step=" << par.step
+        COTR3(RangeExpr, (ASTNode*, start), (ASTNode*, end), (ASTNode*, step));
+
+        void Print(std::ostream& os) const override {
+            os << "RangeExpr(start=" << start
+                << ", end=" << end
+                << ", step=" << step
                 << ")";
-            return os;
+        }
+
+        constexpr TokenImpl GetToken() const override {
+            return start->GetToken();
         }
     };
 
-    struct LambdaExpr {
+    struct LambdaExpr final : Expr {
+        TokenComp<TokenType::SymbolLeftParenthesis> leftPar;
         std::vector<Parameter> params;
-        ASTNode returns;
-        std::vector<ASTNode> body;
+        ASTNode* returns;
+        std::vector<ASTNode*> body;
 
-        friend std::ostream& operator<<(std::ostream& os, const LambdaExpr& par) {
-            os << "LambdaExpr(params=" << par.params
-                << ", returns=" << par.returns
-                << ", body=" << par.body
+        COTR4(LambdaExpr, (TokenComp<TokenType::SymbolLeftParenthesis>, leftPar), (std::vector<Parameter>, params),
+              (ASTNode*, returns), (std::vector<ASTNode*>, body));
+
+        void Print(std::ostream& os) const override {
+            os << "LambdaExpr(params=" << params
+                << ", returns=" << returns
+                << ", body=" << body
                 << ")";
-            return os;
+        }
+
+        constexpr TokenImpl GetToken() const override {
+            return leftPar;
         }
     };
 
-    struct ScopeExpr {
-        std::vector<ASTNode> body;
+    struct ScopeExpr final : Expr {
+        TokenImpl token_;
+        std::vector<ASTNode*> body;
 
-        friend std::ostream& operator<<(std::ostream& os, const ScopeExpr& par) {
-            os << "ScopeExpr(" << par.body << ")";
-            return os;
+        COTR2(ScopeExpr, (TokenImpl, token_), (std::vector<ASTNode*>, body));
+
+        void Print(std::ostream& os) const override {
+            os << "ScopeExpr(" << body << ")";
+        }
+
+        constexpr TokenImpl GetToken() const override {
+            return token_;
         }
     };
 
 
-    struct IdentifierTypeExpr {
-        ASTNode id;
-        std::vector<ASTNode> arguments;
+    struct GenericTypeExpr final : TypeExpr {
+        ASTNode* id;
+        std::vector<ASTNode*> arguments;
 
-        friend std::ostream& operator<<(std::ostream& os, const IdentifierTypeExpr& par) {
-            os << "IdentifierTypeExpr(id=" << par.id
-                << ", arguments=" << par.arguments
+        COTR2(GenericTypeExpr, (ASTNode*, id), (std::vector<ASTNode*>, arguments));
+
+        void Print(std::ostream& os) const override {
+            os << "GenericTypeExpr(id=" << id
+                << ", arguments=" << arguments
                 << ")";
-            return os;
+        }
+
+        constexpr TokenImpl GetToken() const override {
+            return id->GetToken();
         }
     };
 
-    struct ArrayTypeExpr {
-        ASTNode elementType;
-        ASTNode size;
+    struct OptionalTypeExpr final : TypeExpr {
+        ASTNode* type;
 
-        friend std::ostream& operator<<(std::ostream& os, const ArrayTypeExpr& par) {
-            os << "ArrayTypeExpr(elementType=" << par.elementType
-                << ", size=" << par.size
+        COTR1(OptionalTypeExpr, (ASTNode*, type));
+
+        void Print(std::ostream& os) const override {
+            os << "OptionalTypeExpr(" << type << ")";
+        }
+
+        constexpr TokenImpl GetToken() const override {
+            return type->GetToken();
+        }
+    };
+
+    struct FunctionTypeExpr final : TypeExpr {
+        ASTNode* returns;
+        std::vector<ASTNode*> params;
+
+        COTR2(FunctionTypeExpr, (ASTNode*, returns), (std::vector<ASTNode*>, params));
+
+        void Print(std::ostream& os) const override {
+            os << "FunctionTypeExpr(params=" << params
+                << ", returns=" << returns
                 << ")";
-            return os;
+        }
+
+        constexpr TokenImpl GetToken() const override {
+            return returns->GetToken();
         }
     };
 
-    struct OptionalTypeExpr {
-        ASTNode type;
+    struct ReferenceTypeExpr final : TypeExpr {
+        ASTNode* type;
 
-        friend std::ostream& operator<<(std::ostream& os, const OptionalTypeExpr& par) {
-            os << "OptionalTypeExpr(" << par.type << ")";
-            return os;
+        COTR1(ReferenceTypeExpr, (ASTNode*, type));
+
+        void Print(std::ostream& os) const override {
+            os << "ReferenceTypeExpr(" << type << ")";
         }
-    };
 
-    struct FunctionTypeExpr {
-        std::vector<ASTNode> params;
-        ASTNode returns;
-
-        friend std::ostream& operator<<(std::ostream& os, const FunctionTypeExpr& par) {
-            os << "FunctionTypeExpr(params=" << par.params
-                << ", returns=" << par.returns
-                << ")";
-            return os;
-        }
-    };
-
-    struct ReferenceTypeExpr {
-        ASTNode type;
-
-        friend std::ostream& operator<<(std::ostream& os, const ReferenceTypeExpr& par) {
-            os << "ReferenceTypeExpr(" << par.type << ")";
-            return os;
+        constexpr TokenImpl GetToken() const override {
+            return type->GetToken();
         }
     };
 
 
-    struct ReturnStmt {
-        ASTNode value;
+    struct ReturnStmt final : Stmt {
+        ASTNode* value;
 
-        friend std::ostream& operator<<(std::ostream& os, const ReturnStmt& par) {
-            os << "ReturnStmt(" << par.value << ")";
-            return os;
+        COTR1(ReturnStmt, (ASTNode*, value));
+
+        void Print(std::ostream& os) const override {
+            os << "ReturnStmt(" << value << ")";
+        }
+
+        constexpr TokenImpl GetToken() const override {
+            return value->GetToken();
         }
     };
 
-    struct BreakStmt {
-        Token token;
+    struct YieldStmt final : Stmt {
+        ASTNode* value;
 
-        friend std::ostream& operator<<(std::ostream& os, const BreakStmt& par) {
+        COTR1(YieldStmt, (ASTNode*, value));
+
+        void Print(std::ostream& os) const override {
+            os << "YieldStmt(" << value << ")";
+        }
+
+        constexpr TokenImpl GetToken() const override {
+            return value->GetToken();
+        }
+    };
+
+    struct BreakStmt final : Stmt {
+        TokenComp<TokenType::KeywordBreak> token_;
+
+        COTR1(BreakStmt, (TokenComp<TokenType::KeywordBreak>, token_));
+
+        void Print(std::ostream& os) const override {
             os << "BreakStmt()";
-            return os;
+        }
+
+        constexpr TokenImpl GetToken() const override {
+            return token_;
         }
     };
 
-    struct ContinueStmt {
-        Token token;
+    struct ContinueStmt final : Stmt {
+        TokenComp<TokenType::KeywordContinue> token_;
 
-        friend std::ostream& operator<<(std::ostream& os, const ContinueStmt& par) {
+        COTR1(ContinueStmt, (TokenComp<TokenType::KeywordContinue>, token_));
+
+        void Print(std::ostream& os) const override {
             os << "ContinueStmt()";
-            return os;
+        }
+
+        constexpr TokenImpl GetToken() const override {
+            return token_;
         }
     };
 
-    struct ExpressionStmt {
-        ASTNode expr;
+    struct ExpressionStmt final : Stmt {
+        ASTNode* expr;
 
-        friend std::ostream& operator<<(std::ostream& os, const ExpressionStmt& par) {
-            os << "ExpressionStmt(" << par.expr << ")";
-            return os;
+        COTR1(ExpressionStmt, (ASTNode*, expr));
+
+        void Print(std::ostream& os) const override {
+            os << "ExpressionStmt(" << expr << ")";
+        }
+
+        constexpr TokenImpl GetToken() const override {
+            return expr->GetToken();
         }
     };
 
-    struct ImportStmt {
-        bool star{};
-        ASTNode module;
+    struct ImportStmt final : Stmt {
+        TokenComp<TokenType::KeywordImport> token_;
+        bool star;
+        ASTNode* module;
         Opt<IdentifierToken> alias;
 
-        friend std::ostream& operator<<(std::ostream& os, const ImportStmt& par) {
-            os << "ImportStmt(star=" << (par.star ? "true" : "false")
-                << ", module=" << par.module
-                << ", alias=" << par.alias
+        COTR4(ImportStmt, (TokenComp<TokenType::KeywordImport>, token_), (bool, star), (ASTNode*, module),
+              (Opt<IdentifierToken>, alias));
+
+        void Print(std::ostream& os) const override {
+            os << "ImportStmt(star=" << (star ? "true" : "false")
+                << ", module=" << module
+                << ", alias=" << alias
                 << ")";
-            return os;
+        }
+
+        constexpr TokenImpl GetToken() const override {
+            return token_;
         }
     };
 
-    struct AliasStmt {
+    struct AliasStmt final : Stmt {
+        TokenComp<TokenType::KeywordAlias> token_;
         IdentifierToken id;
-        ASTNode type;
+        ASTNode* type;
 
-        friend std::ostream& operator<<(std::ostream& os, const AliasStmt& par) {
-            os << "AliasStmt(id=" << par.id << ", type=" << par.type << ")";
-            return os;
+        COTR3(AliasStmt, (TokenComp<TokenType::KeywordAlias>, token_), (IdentifierToken, id), (ASTNode*, type));
+
+        void Print(std::ostream& os) const override {
+            os << "AliasStmt(id=" << id << ", type=" << type << ")";
+        }
+
+        constexpr TokenImpl GetToken() const override {
+            return token_;
         }
     };
 
-    struct VariableDefineStmt {
+    struct VariableDefineStmt final : Stmt {
         bool constant;
-        ASTNode id;
-        ASTNode type;
-        ASTNode value;
+        ASTNode* id;
+        ASTNode* type;
+        ASTNode* value;
 
-        friend std::ostream& operator<<(std::ostream& os, const VariableDefineStmt& par) {
-            os << "VariableDefineStmt(constant=" << (par.constant ? "true" : "false")
-                << ", id=" << par.id
-                << ", type=" << par.type <<
-                ", value=" << par.value
+        COTR4(VariableDefineStmt, (bool, constant), (ASTNode*, id), (ASTNode*, type), (ASTNode*, value));
+
+        void Print(std::ostream& os) const override {
+            os << "VariableDefineStmt(constant=" << (constant ? "true" : "false")
+                << ", id=" << id
+                << ", type=" << type <<
+                ", value=" << value
                 << ")";
-            return os;
+        }
+
+        constexpr TokenImpl GetToken() const override {
+            return id->GetToken();
         }
     };
 
-    struct IfStmt {
-        std::vector<ASTNode> conditions;
-        std::vector<std::vector<ASTNode>> bodies;
-        std::vector<ASTNode> elseBody;
+    struct IfStmt final : Stmt {
+        TokenComp<TokenType::KeywordIf> token_;
+        ASTNode* condition;
+        std::vector<ASTNode*> body;
+        ASTNode* elseBody;
 
-        friend std::ostream& operator<<(std::ostream& os, const IfStmt& par) {
-            os << "IfStmt(conditions=" << par.conditions
-                << ", bodies=" << par.bodies
-                << ", elseBody=" << par.elseBody
+        COTR4(IfStmt, (TokenComp<TokenType::KeywordIf>, token_), (ASTNode*, condition), (std::vector<ASTNode*>, body),
+              (ASTNode*, elseBody));
+
+        void Print(std::ostream& os) const override {
+            os << "IfStmt(condition=" << condition
+                << ", body=" << body
+                << ", elseBody=" << elseBody
                 << ")";
-            return os;
+        }
+
+        constexpr TokenImpl GetToken() const override {
+            return token_;
         }
     };
 
-    struct ForStmt {
+    struct ForStmt final : Stmt {
+        TokenComp<TokenType::KeywordFor> token_;
+        ASTNode* iterable;
         std::vector<IdentifierToken> identifiers;
-        ASTNode iterable;
-        std::vector<ASTNode> body;
-        std::vector<ASTNode> elseBody;
+        std::vector<ASTNode*> body;
+        std::vector<ASTNode*> elseBody;
 
-        friend std::ostream& operator<<(std::ostream& os, const ForStmt& par) {
-            os << "ForStmt(identifiers=" << par.identifiers
-                << ", iterable=" << par.iterable
-                << ", body=" << par.body
-                << ", elseBody=" << par.elseBody
+        COTR5(ForStmt, (TokenComp<TokenType::KeywordFor>, token_), (ASTNode*, iterable),
+              (std::vector<IdentifierToken>, identifiers), (std::vector<ASTNode*>, body),
+              (std::vector<ASTNode*>, elseBody));
+
+        void Print(std::ostream& os) const override {
+            os << "ForStmt(identifiers=" << identifiers
+                << ", iterable=" << iterable
+                << ", body=" << body
+                << ", elseBody=" << elseBody
                 << ")";
-            return os;
+        }
+
+        constexpr TokenImpl GetToken() const override {
+            return token_;
         }
     };
 
-    struct FunctionStmt {
+    struct FunctionStmt final : Stmt {
+        TokenComp<TokenType::KeywordFun> token_;
         PropVisibility visibility;
-        ASTNode id;
-        std::vector<GenericParameter> generics;
+        ASTNode* id;
+        ASTNode* returns;
+        std::vector<Generic> generics;
         std::vector<Parameter> params;
-        ASTNode returns;
-        std::vector<ASTNode> body;
+        std::vector<ASTNode*> body;
 
-        friend std::ostream& operator<<(std::ostream& os, const FunctionStmt& par) {
-            os << "FunctionStmt(visibility=" << par.visibility
-                << ", id=" << par.id
-                << ", generics=" << par.generics
-                << ", params=" << par.params
-                << ", returns=" << par.returns
-                << ", body=" << par.body
+        COTR7(FunctionStmt, (TokenComp<TokenType::KeywordFun>, token_), (PropVisibility, visibility), (ASTNode*, id),
+              (ASTNode*, returns), (std::vector<Generic>, generics), (std::vector<Parameter>, params),
+              (std::vector<ASTNode*>, body));
+
+        void Print(std::ostream& os) const override {
+            os << "FunctionStmt(visibility=" << visibility
+                << ", id=" << id
+                << ", generics=" << generics
+                << ", params=" << params
+                << ", returns=" << returns
+                << ", body=" << body
                 << ")";
-            return os;
+        }
+
+        constexpr TokenImpl GetToken() const override {
+            return token_;
         }
     };
 
-    struct BinaryOpFunctionStmt {
+    struct OperatorFunctionStmt final : Stmt {
+        TokenComp<TokenType::KeywordFun> token_;
         PropVisibility visibility;
-        ASTNode id;
+        OperatorType op;
+        ASTNode* id;
+        ASTNode* returns;
         std::vector<Parameter> params;
-        ASTNode returns;
-        std::vector<ASTNode> body;
+        std::vector<Generic> generics;
+        std::vector<ASTNode*> body;
 
-        friend std::ostream& operator<<(std::ostream& os, const BinaryOpFunctionStmt& par) {
-            os << "BinaryOpFunctionStmt(visibility=" << par.visibility
-                << ", id=" << par.id
-                << ", params=" << par.params
-                << ", returns=" << par.returns
-                << ", body=" << par.body
+        COTR8(OperatorFunctionStmt, (TokenComp<TokenType::KeywordFun>, token_), (PropVisibility, visibility),
+              (OperatorType, op), (ASTNode*, id), (ASTNode*, returns), (std::vector<Parameter>, params),
+              (std::vector<Generic>, generics), (std::vector<ASTNode*>, body));
+
+        void Print(std::ostream& os) const override {
+            os << "BinaryOperatorFunctionStmt(visibility=" << visibility
+                << ", id=" << id
+                << ", op=" << op
+                << ", params=" << params
+                << ", generics=" << generics
+                << ", returns=" << returns
+                << ", body=" << body
                 << ")";
-            return os;
+        }
+
+        constexpr TokenImpl GetToken() const override {
+            return token_;
         }
     };
 
-    struct UnaryOpFunctionStmt {
+    struct GetFunctionStmt final : Stmt {
+        TokenComp<TokenType::KeywordFun> token_;
         PropVisibility visibility;
-        ASTNode id;
-        std::optional<Parameter> param;
-        ASTNode returns;
-        std::vector<ASTNode> body;
+        ASTNode* id;
+        ASTNode* returns;
+        std::vector<Generic> generics;
+        std::vector<ASTNode*> body;
 
-        friend std::ostream& operator<<(std::ostream& os, const UnaryOpFunctionStmt& par) {
-            os << "UnaryOpFunctionStmt(visibility=" << par.visibility
-                << ", id=" << par.id
-                << ", param=" << par.param
-                << ", returns=" << par.returns
-                << ", body=" << par.body
+        COTR6(GetFunctionStmt, (TokenComp<TokenType::KeywordFun>, token_), (PropVisibility, visibility), (ASTNode*, id),
+              (ASTNode*, returns), (std::vector<Generic>, generics), (std::vector<ASTNode*>, body));
+
+        void Print(std::ostream& os) const override {
+            os << "GetFunctionStmt(visibility=" << visibility
+                << ", id=" << id
+                << ", generics=" << generics
+                << ", returns=" << returns
+                << ", body=" << body
                 << ")";
-            return os;
+        }
+
+        constexpr TokenImpl GetToken() const override {
+            return token_;
         }
     };
 
-    struct GetFunctionStmt {
+    struct SetFunctionStmt final : Stmt {
+        TokenComp<TokenType::KeywordFun> token_;
         PropVisibility visibility;
-        ASTNode id;
-        ASTNode returns;
-        std::vector<ASTNode> body;
+        ASTNode* id;
+        Parameter param;
+        std::vector<Generic> generics;
+        std::vector<ASTNode*> body;
 
-        friend std::ostream& operator<<(std::ostream& os, const GetFunctionStmt& par) {
-            os << "GetFunctionStmt(visibility=" << par.visibility
-                << ", id=" << par.id
-                << ", returns=" << par.returns
-                << ", body=" << par.body
+        COTR6(SetFunctionStmt, (TokenComp<TokenType::KeywordFun>, token_), (PropVisibility, visibility), (ASTNode*, id),
+              (Parameter, param), (std::vector<Generic>, generics), (std::vector<ASTNode*>, body));
+
+        void Print(std::ostream& os) const override {
+            os << "SetFunctionStmt(visibility=" << visibility
+                << ", id=" << id
+                << ", generics=" << generics
+                << ", param=" << param
+                << ", body=" << body
                 << ")";
-            return os;
+        }
+
+        constexpr TokenImpl GetToken() const override {
+            return token_;
         }
     };
 
-    struct SetFunctionStmt {
-        PropVisibility visibility;
-        ASTNode id;
-        std::optional<Parameter> param;
-        std::vector<ASTNode> body;
+    struct WhileStmt final : Stmt {
+        TokenComp<TokenType::KeywordWhile> token_;
+        ASTNode* condition;
+        std::vector<ASTNode*> body;
+        std::vector<ASTNode*> elseBody;
 
-        friend std::ostream& operator<<(std::ostream& os, const SetFunctionStmt& par) {
-            os << "SetFunctionStmt(visibility=" << par.visibility
-                << ", id=" << par.id
-                << ", param=" << par.param
-                << ", body=" << par.body
+        COTR4(WhileStmt, (TokenComp<TokenType::KeywordWhile>, token_), (ASTNode*, condition),
+              (std::vector<ASTNode*>, body), (std::vector<ASTNode*>, elseBody));
+
+        void Print(std::ostream& os) const override {
+            os << "WhileStmt(condition=" << condition
+                << ", body=" << body
+                << ", elseBody=" << elseBody
                 << ")";
-            return os;
+        }
+
+        constexpr TokenImpl GetToken() const override {
+            return token_;
         }
     };
 
-    struct WhileStmt {
-        ASTNode condition;
-        std::vector<ASTNode> body;
-        std::vector<ASTNode> elseBody;
+    struct DoWhileStmt final : Stmt {
+        TokenComp<TokenType::KeywordDo> token_;
+        ASTNode* condition;
+        std::vector<ASTNode*> body;
+        std::vector<ASTNode*> elseBody;
 
-        friend std::ostream& operator<<(std::ostream& os, const WhileStmt& par) {
-            os << "WhileStmt(condition=" << par.condition
-                << ", body=" << par.body
-                << ", elseBody=" << par.elseBody
+        COTR4(DoWhileStmt, (TokenComp<TokenType::KeywordDo>, token_), (ASTNode*, condition),
+              (std::vector<ASTNode*>, body), (std::vector<ASTNode*>, elseBody));
+
+        void Print(std::ostream& os) const override {
+            os << "DoWhileStmt(body=" << body
+                << ", condition=" << condition
+                << ", elseBody=" << elseBody
                 << ")";
-            return os;
+        }
+
+        constexpr TokenImpl GetToken() const override {
+            return token_;
         }
     };
 
-    struct DoWhileStmt {
-        std::vector<ASTNode> body;
-        ASTNode condition;
-        std::vector<ASTNode> elseBody;
-
-        friend std::ostream& operator<<(std::ostream& os, const DoWhileStmt& par) {
-            os << "DoWhileStmt(body=" << par.body
-                << ", condition=" << par.condition
-                << ", elseBody=" << par.elseBody
-                << ")";
-            return os;
-        }
-    };
-
-    struct ClassStmt {
+    struct StructStmt final : Stmt {
+        TokenComp<TokenType::KeywordStruct> token_;
         bool isEnum;
         IdentifierToken id;
-        std::vector<GenericParameter> generics;
-        ASTNode superClass;
-        std::vector<GenericParameter> superClassGenerics;
-        std::vector<FunctionStmt*> constructors;
-        std::vector<VariableDefineStmt*> properties;
-        std::vector<GetFunctionStmt*> getters;
-        std::vector<SetFunctionStmt*> setters;
-        std::vector<FunctionStmt*> methods;
-        std::vector<FunctionStmt*> staticMethods;
-        std::vector<BinaryOpFunctionStmt*> binaryOperators;
-        std::vector<UnaryOpFunctionStmt*> unaryOperators;
+        ASTNode* extends;
+        std::vector<Generic> generics;
+        std::vector<ASTNode*> implements;
+        std::vector<ASTNode*> statements;
         std::vector<EnumMember> enumMembers;
 
-        friend std::ostream& operator<<(std::ostream& os, const ClassStmt& par) {
-            os << "ClassStmt(id=" << par.id
-                << ", isEnum=" << (par.isEnum ? "true" : "false")
-                << ", generics=" << par.generics
-                << ", superClass=" << par.superClass
-                << ", superClassGenerics=" << par.superClassGenerics
-                << ", constructors=" << par.constructors
-                << ", properties=" << par.properties
-                << ", getters=" << par.getters
-                << ", setters=" << par.setters
-                << ", methods=" << par.methods
-                << ", staticMethods=" << par.staticMethods
-                << ", binaryOperators=" << par.binaryOperators
-                << ", unaryOperators=" << par.unaryOperators
-                << ", enumMembers=" << par.enumMembers
+        COTR8(StructStmt, (TokenComp<TokenType::KeywordStruct>, token_), (bool, isEnum), (IdentifierToken, id),
+              (ASTNode*, extends), (std::vector<Generic>, generics), (std::vector<ASTNode*>, implements),
+              (std::vector<ASTNode*>, statements), (std::vector<EnumMember>, enumMembers));
+
+        void Print(std::ostream& os) const override {
+            os << "StructStmt(id=" << id
+                << ", isEnum=" << (isEnum ? "true" : "false")
+                << ", generics=" << generics
+                << ", extends=" << extends
+                << ", implements=" << implements
+                << ", statements=" << statements
+                << ", enumMembers=" << enumMembers
                 << ")";
-            return os;
+        }
+
+        constexpr TokenImpl GetToken() const override {
+            return token_;
         }
     };
 
-    template <typename Visitor>
-    auto visit(const ASTNode& node, Visitor&& visitor) {
-        switch (node.type) {
-        case ASTNodeKind::NONE:
-            return visitor(node.as<NoneNode>());
-        case ASTNodeKind::VariableExpr:
-            return visitor(node.as<VariableExpr>());
-        case ASTNodeKind::PropertyExpr:
-            return visitor(node.as<PropertyExpr>());
-        case ASTNodeKind::VariableIncDecExpr:
-            return visitor(node.as<VariableIncDecExpr>());
-        case ASTNodeKind::CallExpr:
-            return visitor(node.as<CallExpr>());
-        case ASTNodeKind::UnaryExpr:
-            return visitor(node.as<UnaryExpr>());
-        case ASTNodeKind::BinaryExpr:
-            return visitor(node.as<BinaryExpr>());
-        case ASTNodeKind::LiteralExpr:
-            return visitor(node.as<LiteralExpr>());
-        case ASTNodeKind::FStringExpr:
-            return visitor(node.as<FStringExpr>());
-        case ASTNodeKind::IndexExpr:
-            return visitor(node.as<IndexExpr>());
-        case ASTNodeKind::TupleExpr:
-            return visitor(node.as<TupleExpr>());
-        case ASTNodeKind::IfExpr:
-            return visitor(node.as<IfExpr>());
-        case ASTNodeKind::RangeExpr:
-            return visitor(node.as<RangeExpr>());
-        case ASTNodeKind::LambdaExpr:
-            return visitor(node.as<LambdaExpr>());
-        case ASTNodeKind::ScopeExpr:
-            return visitor(node.as<ScopeExpr>());
-        case ASTNodeKind::IdentifierTypeExpr:
-            return visitor(node.as<IdentifierTypeExpr>());
-        case ASTNodeKind::ArrayTypeExpr:
-            return visitor(node.as<ArrayTypeExpr>());
-        case ASTNodeKind::OptionalTypeExpr:
-            return visitor(node.as<OptionalTypeExpr>());
-        case ASTNodeKind::FunctionTypeExpr:
-            return visitor(node.as<FunctionTypeExpr>());
-        case ASTNodeKind::ReferenceTypeExpr:
-            return visitor(node.as<ReferenceTypeExpr>());
-        case ASTNodeKind::ReturnStmt:
-            return visitor(node.as<ReturnStmt>());
-        case ASTNodeKind::BreakStmt:
-            return visitor(node.as<BreakStmt>());
-        case ASTNodeKind::ContinueStmt:
-            return visitor(node.as<ContinueStmt>());
-        case ASTNodeKind::ExpressionStmt:
-            return visitor(node.as<ExpressionStmt>());
-        case ASTNodeKind::ImportStmt:
-            return visitor(node.as<ImportStmt>());
-        case ASTNodeKind::AliasStmt:
-            return visitor(node.as<AliasStmt>());
-        case ASTNodeKind::VariableDefineStmt:
-            return visitor(node.as<VariableDefineStmt>());
-        case ASTNodeKind::IfStmt:
-            return visitor(node.as<IfStmt>());
-        case ASTNodeKind::ForStmt:
-            return visitor(node.as<ForStmt>());
-        case ASTNodeKind::FunctionStmt:
-            return visitor(node.as<FunctionStmt>());
-        case ASTNodeKind::BinaryOpFunctionStmt:
-            return visitor(node.as<BinaryOpFunctionStmt>());
-        case ASTNodeKind::UnaryOpFunctionStmt:
-            return visitor(node.as<UnaryOpFunctionStmt>());
-        case ASTNodeKind::GetFunctionStmt:
-            return visitor(node.as<GetFunctionStmt>());
-        case ASTNodeKind::SetFunctionStmt:
-            return visitor(node.as<SetFunctionStmt>());
-        case ASTNodeKind::WhileStmt:
-            return visitor(node.as<WhileStmt>());
-        case ASTNodeKind::DoWhileStmt:
-            return visitor(node.as<DoWhileStmt>());
-        case ASTNodeKind::ClassStmt:
-            return visitor(node.as<ClassStmt>());
+    struct InterfaceStmt final : Stmt {
+        TokenComp<TokenType::KeywordInterface> token_;
+        ASTNode* id;
+        std::vector<Generic> generics;
+        std::vector<ASTNode*> extends;
+        std::vector<ASTNode*> statements;
+
+        COTR5(InterfaceStmt, (TokenComp<TokenType::KeywordInterface>, token_), (ASTNode*, id),
+              (std::vector<Generic>, generics), (std::vector<ASTNode*>, extends), (std::vector<ASTNode*>, statements));
+
+        void Print(std::ostream& os) const override {
+            os << "InterfaceStmt(id=" << id
+                << ", generics=" << generics
+                << ", extends=" << extends
+                << ", statements=" << statements
+                << ")";
         }
-        return visitor(node.as<NoneNode>());
-    }
+
+        constexpr TokenImpl GetToken() const override {
+            return token_;
+        }
+    };
 
     struct Parser {
     private:
@@ -723,9 +894,10 @@ namespace Flame {
         const FileTokenizer& cur;
         size_t current{0};
         Arena& arena;
-        ASTNode noneNode{ASTNode::create<NoneNode>(arena, ASTNodeKind::NONE)};
 
     public:
+        ASTNode* noneNode = CreateNode<NoneNode>();
+
         explicit Parser(Arena& arena, const Tokenizer& tokenizer)
             : tokenizer(tokenizer), cur(tokenizer.files.begin()->second), arena(arena) {
         }
@@ -742,6 +914,10 @@ namespace Flame {
         [[nodiscard]] Token Peek() const {
             if (Over()) return {TokenType::EndOfFile, cur._content.end()._Ptr, 0};
             return cur.tokens[current];
+        }
+
+        [[nodiscard]] bool PeekIs(TokenType type) const {
+            return Peek().type == type;
         }
 
         [[nodiscard]] Token PeekNoLine() const {
@@ -773,7 +949,7 @@ namespace Flame {
         }
 
         void Expect(TokenType type) {
-            if (Peek().type != type) {
+            if (!PeekIs(type)) {
                 ThrowError(
                     "Expected '" + GetTokenValue(type) + "', got '" +
                     std::string(Peek().value) + (
@@ -804,111 +980,40 @@ namespace Flame {
             cur.ThrowError(message, cur._content.data() + start, length);
         }
 
-        [[noreturn]] void ThrowError(const std::string& message, const ASTNode& node) {
-            switch (node.type) {
-            case ASTNodeKind::NONE:
-                throw std::runtime_error(message + " at NONE node");
-            case ASTNodeKind::VariableExpr:
-                ThrowError(message, node.as<VariableExpr>().name);
-            case ASTNodeKind::PropertyExpr:
-                ThrowError(message, node.as<PropertyExpr>().callee);
-            case ASTNodeKind::VariableIncDecExpr:
-                ThrowError(message, node.as<VariableIncDecExpr>().var);
-            case ASTNodeKind::CallExpr:
-                ThrowError(message, node.as<CallExpr>().callee);
-            case ASTNodeKind::UnaryExpr:
-                ThrowError(message, node.as<UnaryExpr>().op);
-            case ASTNodeKind::BinaryExpr:
-                ThrowError(message, node.as<BinaryExpr>().left);
-            case ASTNodeKind::LiteralExpr:
-                ThrowError(message, node.as<LiteralExpr>().value);
-            case ASTNodeKind::FStringExpr:
-                ThrowError(message, node.as<FStringExpr>().start);
-            case ASTNodeKind::IndexExpr:
-                ThrowError(message, node.as<IndexExpr>().callee);
-            case ASTNodeKind::TupleExpr:
-                ThrowError(message, node.as<TupleExpr>().leftPar);
-            case ASTNodeKind::IfExpr:
-                ThrowError(message, node.as<IfExpr>().ifToken);
-            case ASTNodeKind::RangeExpr:
-                ThrowError(message, node.as<RangeExpr>().start);
-            case ASTNodeKind::LambdaExpr:
-                ThrowError(message, node.as<LambdaExpr>().params[0].id);
-            case ASTNodeKind::ScopeExpr:
-                ThrowError(message, node.as<ScopeExpr>().body[0]);
-            case ASTNodeKind::IdentifierTypeExpr:
-                ThrowError(message, node.as<IdentifierTypeExpr>().id);
-            case ASTNodeKind::ArrayTypeExpr:
-                ThrowError(message, node.as<ArrayTypeExpr>().elementType);
-            case ASTNodeKind::OptionalTypeExpr:
-                ThrowError(message, node.as<OptionalTypeExpr>().type);
-            case ASTNodeKind::FunctionTypeExpr:
-                ThrowError(message, node.as<FunctionTypeExpr>().params[0]);
-            case ASTNodeKind::ReferenceTypeExpr:
-                ThrowError(message, node.as<ReferenceTypeExpr>().type);
-            case ASTNodeKind::ReturnStmt:
-                ThrowError(message, node.as<ReturnStmt>().value);
-            case ASTNodeKind::BreakStmt:
-                ThrowError(message, node.as<BreakStmt>().token);
-            case ASTNodeKind::ContinueStmt:
-                ThrowError(message, node.as<ContinueStmt>().token);
-            case ASTNodeKind::ExpressionStmt:
-                ThrowError(message, node.as<ExpressionStmt>().expr);
-            case ASTNodeKind::ImportStmt:
-                ThrowError(message, node.as<ImportStmt>().module);
-            case ASTNodeKind::AliasStmt:
-                ThrowError(message, node.as<AliasStmt>().id);
-            case ASTNodeKind::VariableDefineStmt:
-                ThrowError(message, node.as<VariableDefineStmt>().id);
-            case ASTNodeKind::IfStmt:
-                ThrowError(message, node.as<IfStmt>().conditions[0]);
-            case ASTNodeKind::ForStmt:
-                ThrowError(message, node.as<ForStmt>().iterable);
-            case ASTNodeKind::FunctionStmt:
-                ThrowError(message, node.as<FunctionStmt>().id);
-            case ASTNodeKind::BinaryOpFunctionStmt:
-                ThrowError(message, node.as<BinaryOpFunctionStmt>().id);
-            case ASTNodeKind::UnaryOpFunctionStmt:
-                ThrowError(message, node.as<UnaryOpFunctionStmt>().id);
-            case ASTNodeKind::GetFunctionStmt:
-                ThrowError(message, node.as<GetFunctionStmt>().id);
-            case ASTNodeKind::SetFunctionStmt:
-                ThrowError(message, node.as<SetFunctionStmt>().id);
-            case ASTNodeKind::WhileStmt:
-                ThrowError(message, node.as<WhileStmt>().condition);
-            case ASTNodeKind::DoWhileStmt:
-                ThrowError(message, node.as<DoWhileStmt>().body[0]);
-            case ASTNodeKind::ClassStmt:
-                ThrowError(message, node.as<ClassStmt>().id);
-            }
+        [[noreturn]] void ThrowError(const std::string& message, const ASTNode* node) const {
+            ThrowError(message, node->GetToken());
         }
 
         template <typename T, typename... Args>
-        ASTNode CreateNode(ASTNodeKind type, Args&&... args) {
-            auto mem = arena.alloc<T>();
-            new(mem) T(std::forward<Args>(args)...);
-            return ASTNode{type, mem};
-        }
-
-        template <typename T, typename... Args>
-        std::pair<T&, ASTNode> CreateNodeDual(ASTNodeKind type, Args&&... args) {
-            auto mem = arena.alloc<T>();
-            new(mem) T(std::forward<Args>(args)...);
-            return std::pair(mem, ASTNode{type, mem});
+        T* CreateNode(Args&&... args) {
+            return ASTNode::Create<T>(arena, std::forward<Args>(args)...);
         }
 
         void SkipNewLines() {
-            while (Peek().type == TokenType::NewLine) current++;
+            while (PeekIs(TokenType::NewLine)) current++;
         }
 
-        ASTNode ParseSingle();
-        ASTNode ParseExpr(int rbp = 0, bool ignoreNewLines = false, bool endAtSet = false, bool endAtGt = false);
-        void ParseExpressions(std::vector<ASTNode>& result, bool ignoreNewLines = false);
-        ASTNode ParseTypeExpr(bool ignoreNewLines = false, bool endAtGt = false);
-        void ParseTypeExpressions(std::vector<ASTNode>& result);
-        ASTNode ParsePropertyExpr(); // despite the name it might return VariableExpr
-        ASTNode ParseStmt();
-        void ParseBracedBlock(std::vector<ASTNode>& result);
-        void ParseStatements(std::vector<ASTNode>& result);
+        ASTNode* ParseSingle();
+        ASTNode* ParseExpr(int rbp = 0, bool ignoreNewLines = false, bool endAtSet = false, bool endAtGt = false,
+                           bool allowType = false);
+        void ParseExpressions(std::vector<ASTNode*>& result, bool ignoreNewLines = false);
+        ASTNode* ParseTypeExpr(bool ignoreNewLines = false, bool endAtGt = false);
+        void ParseTypeExpressions(std::vector<ASTNode*>& result);
+        void ParseGenerics(std::vector<Generic>& result);
+        ASTNode* ParsePropertyExpr(); // despite the name it might return VariableExpr
+        void ParseFunctionArgument(Parameter& param);
+        void ParseFunctionArguments(std::vector<Parameter>& result);
+        ASTNode* ParseVariableDefine(bool const_);
+        ASTNode* ParseForLoop(TokenComp<TokenType::KeywordFor> tok);
+        ASTNode* ParseWhileLoop(TokenComp<TokenType::KeywordWhile> tok);
+        ASTNode* ParseDoWhileLoop(TokenComp<TokenType::KeywordDo> tok);
+        ASTNode* ParseAliasStmt(TokenComp<TokenType::KeywordAlias> tok);
+        ASTNode* ParseImportStmt(TokenComp<TokenType::KeywordImport> tok);
+        ASTNode* ParseFunctionStmt(TokenComp<TokenType::KeywordFun> funTok, PropVisibility visibility);
+        ASTNode* ParseStructStmt(TokenComp<TokenType::KeywordStruct> tok, bool isEnum);
+        ASTNode* ParseInterfaceStmt(TokenComp<TokenType::KeywordInterface> tok);
+        ASTNode* ParseStatement();
+        void ParseBracedBlock(std::vector<ASTNode*>& result);
+        void ParseStatements(std::vector<ASTNode*>& result);
     };
 }

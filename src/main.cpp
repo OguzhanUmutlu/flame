@@ -5,9 +5,6 @@
 #include "parser.hpp"
 #include "utils.hpp"
 
-// todo: optimize compile time loops where if let's say there are 50 empty cases and 1 valid case just run that one instead of looping
-//     llvm might do this automatically but not sure
-
 using namespace Flame;
 
 int main(int argc, char* argv[]) {
@@ -25,7 +22,7 @@ int main(int argc, char* argv[]) {
     std::cout << tokenizer.files.begin()->second.tokens << std::endl;
 
     auto parser = Parser(arena, tokenizer);
-    std::vector<ASTNode> statements;
+    std::vector<ASTNode*> statements;
 
     parser.ParseStatements(statements);
 

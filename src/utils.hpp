@@ -11,7 +11,16 @@ namespace Flame {
     using Opt = std::optional<T>;
 
     template <typename T>
-    static std::ostream& PrintVec(std::ostream& os, const std::vector<T>& ls) {
+    using vector = std::vector<T>;
+
+    using ostream = std::ostream;
+    using string = std::string;
+
+    template <typename T>
+    using uptr = std::unique_ptr<T>;
+
+    template <typename T>
+    static ostream& PrintVec(ostream& os, const vector<T>& ls) {
         os << '[';
         for (size_t i = 0; i < ls.size(); i++) {
             os << ls[i];
@@ -22,7 +31,7 @@ namespace Flame {
     }
 
     template <typename T>
-    static std::ostream& PrintVecLine(std::ostream& os, const std::vector<T>& ls) {
+    static ostream& PrintVecLine(ostream& os, const vector<T>& ls) {
         if (ls.empty()) return os << "[]";
         if (ls.size() == 1) return os << "[" << ls[0] << "]";
         os << "[\n";
@@ -40,7 +49,7 @@ namespace Flame {
     }
 
     template <typename T>
-    static std::ostream& PrintVecP(std::ostream& os, const std::vector<T*>& ls) {
+    static ostream& PrintVecP(ostream& os, const vector<T*>& ls) {
         os << '[';
         for (size_t i = 0; i < ls.size(); i++) {
             os << *ls[i];
@@ -51,24 +60,17 @@ namespace Flame {
     }
 
     template <typename T>
-    std::ostream& operator<<(std::ostream& os, const Opt<T>& opt) {
+    ostream& operator<<(ostream& os, const Opt<T>& opt) {
         if (opt.has_value()) os << opt.value();
         else os << "null";
         return os;
     }
 
-    template <typename T>
-    std::ostream& operator<<(std::ostream& os, const std::unique_ptr<T>& opt) {
-        if (opt) os << *opt;
-        else os << "null";
-        return os;
-    }
-
-    std::string GetFileContent(const std::string& filename);
-    void GetFileContent(const std::string& filename, std::string& content);
+    string GetFileContent(const string& filename);
+    void GetFileContent(const string& filename, string& content);
 
     template <typename T>
-    static std::ostream& operator<<(std::ostream& os, const std::vector<T>& ls) {
+    static ostream& operator<<(ostream& os, const vector<T>& ls) {
         PrintVecLine(os, ls);
         return os;
     }

@@ -1,0 +1,89 @@
+class list<T> {
+    private _size: usize
+    private data: Box<T[]>
+    get size() = _size
+    get capacity() = data.size
+
+    init() {
+        _size = 0
+        data = Box<T[4]>()
+    }
+
+    init(...elements: T[]) {
+        _size = elements.size
+        data = Box<T[elements.size + elements.size >> 1]>()
+        for (i in elements.size) {
+            data[i] = elements[i]
+        }
+    }
+
+    reserve(r: usize) {
+        if (capacity < r) {
+            data = Box<T[r]>(data)
+        }
+    }
+
+    push(element: &T) {
+        if (_size + 1 > capacity) {
+            data = Box<T[capacity + capacity >> 1]>(data)
+        }
+        data[_size++] = element
+    }
+
+    emplace(...args: Arguments<T.init>) {
+        if (_size + 1 > capacity) {
+            data = Box<T[capacity + capacity >> 1]>(data)
+        }
+        data[_size++] = T(...args)
+    }
+
+    pop(): &T? {
+        if (_size == 0) return null
+        return data[_size--]
+    }
+
+    back(): &T? {
+        if (_size == 0) return null
+        return data[_size - 1]
+    }
+
+    indexOf(element: T): int? {
+        for (i in _size) {
+            if (data[i] == element) return i
+        }
+        return null
+    }
+
+    find(search: (T) -> bool): &T? {
+        for (i in _size) {
+            if (search(data[i])) return data[i]
+        }
+        return null
+    }
+
+    findIndexOf(search: (T) -> bool): int? {
+        for (i in _size) {
+            if (search(data[i])) return i
+        }
+        return null
+    }
+
+    operator [](index: int) {
+        return data[index]
+    }
+
+    operator []=(index: int, value: T) {
+        data[index] = value
+    }
+
+    operator in(element: T) {
+        for (i in 0.._size) {
+            if (data[i] == element) return true
+        }
+        return false
+    }
+
+    shrink() {
+        data.resize()
+    }
+}

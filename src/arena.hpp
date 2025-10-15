@@ -115,7 +115,7 @@ private:
             return result;
         }
 
-        size_t blk_size = std::max(default_block_size_, n + align);
+        size_t blk_size = std::max(default_block_size_, n + align); // If too big allocate just enough.
         allocate_block(blk_size);
 
         Block& nb = blocks_.back();

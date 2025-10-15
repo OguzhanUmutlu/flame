@@ -13,43 +13,90 @@
 #include "utils.hpp"
 #include "utfcpp/utf8/checked.h"
 
-static bool PrintTokenValue = false;
+static bool PrintTokenValue = true;
 
 namespace Flame {
+    static const std::string operators[] = {
+        "<<=", ">>=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "@=",
+
+        "&&", "||", "++", "--", "<<", ">>", "+", "-", "*", "/", "%", "!=", "!", "<=", ">=", "<", ">", "&", "|",
+        "^", "~", "@", "==",
+
+        "="
+    };
+    static constexpr char symbols[] = {
+        '(', ')', '{', '}', '[', ']', ',', ':', '.', '?'
+    };
+    // You can freely edit any keyword, even use Unicode characters! Should be in the same order as TokenType enum
+    static const std::string keywords[] = {
+        "if", "else", "while", "for", "return", "fun", "struct",
+        "import", "var", "val", "break", "continue", "when", "try",
+        "catch", "finally", "throw", "get", "set", "default", "delete",
+        "in", "as", "do", "alias", "enum", "public", "protected", "private",
+        "operator", "interface", "extends", "implements", "true", "false",
+        "yield"
+    };
+
     enum class TokenType {
+        None,
         EndOfFile,
         Identifier,
         Integer,
         Float,
         Char,
         String,
-        Boolean,
         StringStart,
         StringMiddle,
         StringEnd,
         NewLine,
 
         Keywords,
-        KeywordIf = Keywords, KeywordElse, KeywordWhile, KeywordFor, KeywordReturn, KeywordFun, KeywordClass,
+        KeywordIf = Keywords, KeywordElse, KeywordWhile, KeywordFor, KeywordReturn, KeywordFun, KeywordStruct,
         KeywordImport, KeywordVar, KeywordVal, KeywordBreak, KeywordContinue, KeywordWhen, KeywordTry, KeywordCatch,
         KeywordFinally, KeywordThrow, KeywordGet, KeywordSet, KeywordDefault, KeywordDelete, KeywordIn, KeywordAs,
-        KeywordDo, KeywordAlias, KeywordEnum,
+        KeywordDo, KeywordAlias, KeywordEnum, KeywordPublic, KeywordProtected, KeywordPrivate, KeywordOperator,
+        KeywordInterface, KeywordExtends, KeywordImplements, KeywordTrue, KeywordFalse, KeywordYield,
+        KeywordsEnd,
 
-        OperatorChars, Operator = OperatorChars,
-        OperatorAssign          = OperatorChars, OperatorAdd, OperatorSub, OperatorMul, OperatorDiv, OperatorMod,
-        OperatorNot, OperatorLt, OperatorGt, OperatorBitAnd, OperatorBitOr, OperatorBitXor, OperatorBitNot,
-        OperatorMatMul,
+        Operators = KeywordsEnd,
 
-        OperatorStrings,
-        OperatorSetShl = OperatorStrings, OperatorSetShr, OperatorSetAdd, OperatorSetSub, OperatorSetMul,
-        OperatorSetDiv, OperatorSetMod, OperatorSetBitAnd, OperatorSetBitOr, OperatorSetBitXor, OperatorSetMatMul,
+        SetOperators   = Operators,
+        OperatorSetShl = Operators, OperatorSetShr, OperatorSetAdd, OperatorSetSub, OperatorSetMul,
+        OperatorSetDiv, OperatorSetMod, OperatorSetBitAnd, OperatorSetBitOr, OperatorSetBitXor,
+        OperatorSetMatMul, SetOperatorsEnd = OperatorSetMatMul,
 
-        OperatorEq, OperatorNeq, OperatorLte, OperatorGte, OperatorAnd, OperatorOr, OperatorInc, OperatorDec,
-        OperatorShl, OperatorShr,
+        NonSetOperators,
+        OperatorAnd = NonSetOperators, OperatorOr, OperatorInc, OperatorDec, OperatorShl, OperatorShr,
+        OperatorAdd, OperatorSub, OperatorMul, OperatorDiv, OperatorMod, OperatorNeq, OperatorNot, OperatorLte,
+        OperatorGte, OperatorLt, OperatorGt, OperatorBitAnd, OperatorBitOr, OperatorBitXor, OperatorBitNot,
+        OperatorMatMul, OperatorEq,
+        NonSetOperatorsEnd = OperatorEq,
 
-        Symbols, Symbol       = Symbols,
+        OperatorAssign,
+
+        OperatorsEnd = OperatorAssign,
+
+        Symbols,
         SymbolLeftParenthesis = Symbols, SymbolRightParenthesis, SymbolLeftBrace, SymbolRightBrace, SymbolLeftBracket,
-        SymbolRightBracket, SymbolComma, SymbolColon, SymbolDot, SymbolQuestion, SymbolArrow, SymbolEllipsis
+        SymbolRightBracket, SymbolComma, SymbolColon, SymbolDot, SymbolQuestion, SymbolArrow, SymbolEllipsis,
+        SymbolWalrus,
+        SymbolsEnd = SymbolWalrus
+    };
+
+    enum class OperatorType {
+        None   = static_cast<int>(TokenType::None),
+        Assign = static_cast<int>(TokenType::OperatorAssign), SetShl, SetShr, SetAdd, SetSub, SetMul,
+        SetDiv, SetMod, SetBitAnd, SetBitOr, SetBitXor, SetMatMul,
+        SetsEnd = SetMatMul,
+
+        Add, Sub, Mul, Div, Mod, Not, Lte, Gte, Lt, Gt, BitAnd, BitOr,
+        BitXor, BitNot, MatMul, Eq, Neq, And, Or, Inc, Dec, Shl, Shr,
+    };
+
+    enum class SymbolType {
+        None    = static_cast<int>(TokenType::None),
+        LeftPar = static_cast<int>(TokenType::Symbols), RightPar, LeftBrace, RightBrace, LeftBracket,
+        RightBracket, Comma, Semicolon, Colon, Dot, Question, Arrow
     };
 
     static std::string GetTokenTypeName(TokenType type) {
@@ -61,30 +108,13 @@ namespace Flame {
         if (type == TokenType::String || type == TokenType::StringStart || type == TokenType::StringMiddle
             || type == TokenType::StringEnd)
             return "String";
-        if (type == TokenType::Boolean) return "Boolean";
         if (type == TokenType::NewLine) return "NewLine";
-        if (type < TokenType::OperatorChars) return "Keyword";
-        if (type < TokenType::Symbols) return "Operator";
+        if (type < TokenType::KeywordsEnd) return "Keyword";
+        if (type <= TokenType::OperatorsEnd) return "Operator";
         return "Symbol";
     }
 
     std::string GetTokenValue(TokenType type);
-
-    enum class OperatorType {
-        Assign = static_cast<int>(TokenType::OperatorAssign), Add, Sub, Mul, Div, Mod,
-        Not, Lt, Gt, BitAnd, BitOr, BitXor, BitNot, MatMul,
-
-        SetShl, SetShr, SetAdd, SetSub, SetMul, SetDiv,
-        SetMod, SetBitAnd, SetBitOr, SetBitXor, SetMatMul,
-
-        Eq, Neq, Lte, Gte, And, Or, Inc, Dec,
-        Shl, Shr
-    };
-
-    enum class SymbolType {
-        LeftPar = static_cast<int>(TokenType::SymbolLeftParenthesis), RightPar, LeftBrace, RightBrace, LeftBracket,
-        RightBracket, Comma, Semicolon, Colon, Dot, Question, Arrow
-    };
 
     struct TokenImpl {
         std::string_view value;
@@ -97,35 +127,32 @@ namespace Flame {
         TokenImpl(const char* start, size_t length) : value(start, length) {
         }
 
-        [[nodiscard]] static constexpr bool is_literal(TokenType type) {
+        [[nodiscard]] static constexpr bool IsLiteral(TokenType type) {
             return type == TokenType::Integer || type == TokenType::Float || type == TokenType::Char
-                || type == TokenType::String || type == TokenType::Boolean;
+                || type == TokenType::String || type == TokenType::KeywordTrue || type == TokenType::KeywordFalse;
         }
 
-        [[nodiscard]] static constexpr bool is_keyword(TokenType type) {
-            return type >= TokenType::Keywords && type < TokenType::OperatorChars;
+        [[nodiscard]] static constexpr bool IsKeyword(TokenType type) {
+            return type >= TokenType::Keywords && type < TokenType::KeywordsEnd;
         }
 
-        [[nodiscard]] static constexpr bool is_operator(TokenType type) {
-            return (type >= TokenType::OperatorChars && type < TokenType::OperatorStrings)
-                || (type >= TokenType::OperatorStrings && type < TokenType::Symbols);
+        [[nodiscard]] static constexpr bool IsOperator(TokenType type) {
+            return type >= TokenType::Operators && type <= TokenType::OperatorsEnd;
         }
 
-        [[nodiscard]] static constexpr bool is_symbol(TokenType type) {
-            return type >= TokenType::Symbols && type < TokenType::Keywords;
+        [[nodiscard]] static constexpr bool IsSymbol(TokenType type) {
+            return type >= TokenType::Symbols && type < TokenType::SymbolsEnd;
         }
 
-        [[nodiscard]] static constexpr bool is_set_operator(TokenType type) {
-            return type == TokenType::OperatorAssign || (type >= TokenType::OperatorSetShl && type <=
-                TokenType::OperatorSetMatMul);
+        [[nodiscard]] static constexpr bool IsSetOperator(TokenType type) {
+            return type >= TokenType::SetOperators && type < TokenType::SetOperatorsEnd;
         }
 
-        [[nodiscard]] static constexpr bool is_arithmetic_operator(TokenType type) {
-            return (type > TokenType::OperatorChars && type < TokenType::OperatorStrings)
-                || (type >= TokenType::OperatorEq && type <= TokenType::OperatorShr);
+        [[nodiscard]] static constexpr bool IsNonSetOperator(TokenType type) {
+            return type >= TokenType::NonSetOperators && type < TokenType::NonSetOperatorsEnd;
         }
 
-        [[nodiscard]] std::int64_t get_int() const {
+        [[nodiscard]] std::int64_t GetInt() const {
             std::string_view sv = value;
             std::string cleaned;
 
@@ -173,7 +200,7 @@ namespace Flame {
             return negative ? -result : result;
         }
 
-        [[nodiscard]] double get_float() const {
+        [[nodiscard]] double GetFloat() const {
             std::string_view sv = value;
             std::string cleaned;
 
@@ -208,28 +235,32 @@ namespace Flame {
     struct TokenComp : TokenImpl {
         using TokenImpl::TokenImpl;
 
-        [[nodiscard]] static constexpr bool is_literal() {
-            return TokenImpl::is_literal(type);
+        [[nodiscard]] static constexpr bool IsLiteral() {
+            return TokenImpl::IsLiteral(type);
         }
 
-        [[nodiscard]] static constexpr bool is_keyword() {
-            return TokenImpl::is_keyword(type);
+        [[nodiscard]] static constexpr bool IsKeyword() {
+            return TokenImpl::IsKeyword(type);
         }
 
-        [[nodiscard]] static constexpr bool is_operator() {
-            return TokenImpl::is_operator(type);
+        [[nodiscard]] static constexpr bool IsOperator() {
+            return TokenImpl::IsOperator(type);
         }
 
-        [[nodiscard]] static constexpr bool is_symbol() {
-            return TokenImpl::is_symbol(type);
+        [[nodiscard]] static constexpr bool IsSymbol() {
+            return TokenImpl::IsSymbol(type);
         }
 
-        [[nodiscard]] static constexpr bool is_set_operator() {
-            return TokenImpl::is_set_operator(type);
+        [[nodiscard]] static constexpr bool IsSetOperator() {
+            return TokenImpl::IsSetOperator(type);
         }
 
-        [[nodiscard]] static constexpr bool is_arithmetic_operator() {
-            return TokenImpl::is_arithmetic_operator(type);
+        [[nodiscard]] static constexpr bool IsNonSetOperator() {
+            return TokenImpl::IsNonSetOperator(type);
+        }
+
+        [[nodiscard]] constexpr TokenImpl Impl() const {
+            return static_cast<TokenImpl>(*this);
         }
     };
 
@@ -250,8 +281,6 @@ namespace Flame {
             os << "Char";
         } else if constexpr (T == TokenType::String) {
             os << "String";
-        } else if constexpr (T == TokenType::Boolean) {
-            os << "Boolean";
         } else if constexpr (T == TokenType::StringStart) {
             os << "StringStart";
         } else if constexpr (T == TokenType::StringMiddle) {
@@ -266,6 +295,9 @@ namespace Flame {
     }
 
     struct OperatorToken : TokenImpl {
+        OperatorToken() : TokenImpl(), type(OperatorType::None) {
+        }
+
         OperatorToken(OperatorType type, const std::string_view& value)
             : TokenImpl(value), type(type) {
         }
@@ -277,12 +309,16 @@ namespace Flame {
 
         OperatorType type;
 
-        [[nodiscard]] constexpr bool is_set_operator() const {
-            return TokenImpl::is_set_operator(static_cast<TokenType>(type));
+        [[nodiscard]] constexpr bool IsSetOperator() const {
+            return TokenImpl::IsSetOperator(static_cast<TokenType>(type));
         }
 
-        [[nodiscard]] constexpr bool is_arithmetic_operator() const {
-            return TokenImpl::is_arithmetic_operator(static_cast<TokenType>(type));
+        [[nodiscard]] constexpr bool IsNonSetOperator() const {
+            return TokenImpl::IsNonSetOperator(static_cast<TokenType>(type));
+        }
+
+        [[nodiscard]] constexpr TokenImpl Impl() const {
+            return static_cast<TokenImpl>(*this);
         }
 
         friend std::ostream& operator<<(std::ostream& os, const OperatorToken& token) {
@@ -307,6 +343,10 @@ namespace Flame {
 
         SymbolType type;
 
+        [[nodiscard]] constexpr TokenImpl Impl() const {
+            return static_cast<TokenImpl>(*this);
+        }
+
         friend std::ostream& operator<<(std::ostream& os, const SymbolToken& token) {
             if (PrintTokenValue) {
                 os << '\'' << token.value << '\'';
@@ -318,6 +358,9 @@ namespace Flame {
     };
 
     struct Token : TokenImpl {
+        Token() : TokenImpl(), type(TokenType::None) {
+        }
+
         Token(TokenType type, const std::string_view& value)
             : TokenImpl(value), type(type) {
         }
@@ -329,28 +372,28 @@ namespace Flame {
 
         TokenType type;
 
-        [[nodiscard]] constexpr bool is_literal() const {
-            return TokenImpl::is_literal(type);
+        [[nodiscard]] constexpr bool IsLiteral() const {
+            return TokenImpl::IsLiteral(type);
         }
 
-        [[nodiscard]] constexpr bool is_keyword() const {
-            return TokenImpl::is_keyword(type);
+        [[nodiscard]] constexpr bool IsKeyword() const {
+            return TokenImpl::IsKeyword(type);
         }
 
-        [[nodiscard]] constexpr bool is_operator() const {
-            return TokenImpl::is_operator(type);
+        [[nodiscard]] constexpr bool IsOperator() const {
+            return TokenImpl::IsOperator(type);
         }
 
-        [[nodiscard]] constexpr bool is_symbol() const {
-            return TokenImpl::is_symbol(type);
+        [[nodiscard]] constexpr bool IsSymbol() const {
+            return TokenImpl::IsSymbol(type);
         }
 
-        [[nodiscard]] constexpr bool is_set_operator() const {
-            return TokenImpl::is_set_operator(type);
+        [[nodiscard]] constexpr bool IsSetOperator() const {
+            return TokenImpl::IsSetOperator(type);
         }
 
-        [[nodiscard]] constexpr bool is_arithmetic_operator() const {
-            return TokenImpl::is_arithmetic_operator(type);
+        [[nodiscard]] constexpr bool IsArithmeticOperator() const {
+            return TokenImpl::IsNonSetOperator(type);
         }
 
         template <TokenType T>
@@ -358,24 +401,28 @@ namespace Flame {
             return TokenComp<T>(value);
         }
 
-        [[nodiscard]] OperatorToken op() const {
-            if (!is_operator()) throw std::runtime_error("Token is not an operator");
+        [[nodiscard]] OperatorToken Op() const {
+            if (!IsOperator()) throw std::runtime_error("Token is not an operator");
             return {static_cast<OperatorType>(type), value};
         }
 
-        [[nodiscard]] constexpr OperatorType op_type() const {
-            if (!is_operator()) throw std::runtime_error("Token is not an operator");
+        [[nodiscard]] constexpr OperatorType OpType() const {
+            if (!IsOperator()) throw std::runtime_error("Token is not an operator");
             return static_cast<OperatorType>(type);
         }
 
-        [[nodiscard]] SymbolToken sym() const {
-            if (!is_symbol()) throw std::runtime_error("Token is not a symbol");
+        [[nodiscard]] SymbolToken Sym() const {
+            if (!IsSymbol()) throw std::runtime_error("Token is not a symbol");
             return {static_cast<SymbolType>(type), value};
         }
 
-        [[nodiscard]] constexpr SymbolType sym_type() const {
-            if (!is_symbol()) throw std::runtime_error("Token is not a symbol");
+        [[nodiscard]] constexpr SymbolType SymType() const {
+            if (!IsSymbol()) throw std::runtime_error("Token is not a symbol");
             return static_cast<SymbolType>(type);
+        }
+
+        [[nodiscard]] constexpr TokenImpl Impl() const {
+            return static_cast<TokenImpl>(*this);
         }
 
         friend std::ostream& operator<<(std::ostream& os, const Token& token) {
@@ -395,8 +442,6 @@ namespace Flame {
                 break;
             case TokenType::String: typeName = "String";
                 break;
-            case TokenType::Boolean: typeName = "Boolean";
-                break;
             case TokenType::StringStart: typeName = "StringStart";
                 break;
             case TokenType::StringMiddle: typeName = "StringMiddle";
@@ -409,10 +454,8 @@ namespace Flame {
             default:
                 if (token.type >= TokenType::Symbols) {
                     typeName = "Symbol";
-                } else if (token.type >= TokenType::OperatorStrings) {
-                    typeName = "OperatorString";
-                } else if (token.type >= TokenType::OperatorChars) {
-                    typeName = "OperatorChar";
+                } else if (token.type >= TokenType::Operators) {
+                    typeName = "Operator";
                 } else if (token.type >= TokenType::Keywords) {
                     typeName = "Keyword";
                 } else {
@@ -431,7 +474,6 @@ namespace Flame {
     using FloatToken = TokenComp<TokenType::Float>;
     using CharToken = TokenComp<TokenType::Char>;
     using StringToken = TokenComp<TokenType::String>;
-    using BooleanToken = TokenComp<TokenType::Boolean>;
     using StringStartToken = TokenComp<TokenType::StringStart>;
     using StringMiddleToken = TokenComp<TokenType::StringMiddle>;
     using StringEndToken = TokenComp<TokenType::StringEnd>;
@@ -444,6 +486,10 @@ namespace Flame {
 
     [[nodiscard]] static constexpr bool IsDigit(utf8::utfchar32_t c) {
         return c >= '0' && c <= '9';
+    }
+
+    [[nodiscard]] static constexpr bool IsNewLine(utf8::utfchar32_t c) {
+        return c == '\n' || c == 0x2028 || c == 0x2029;
     }
 
     [[nodiscard]] static constexpr bool IsSpace(utf8::utfchar32_t c) {
@@ -504,10 +550,6 @@ namespace Flame {
         return true;
     }
 
-    [[nodiscard]] static constexpr bool IsNewLine(utf8::utfchar32_t c) {
-        return c == '\n' || c == 0x2028 || c == 0x2029;
-    }
-
     struct FileTokenizer {
         std::string filepath;
         std::string _content;
@@ -515,6 +557,7 @@ namespace Flame {
         char* end{nullptr};
         std::vector<Token> tokens;
 
+        constexpr int GetOperator() const;
         void Tokenize();
 
         [[nodiscard]] utf8::utfchar32_t Peek() const {
@@ -658,4 +701,7 @@ namespace Flame {
         PrintVec(os, ls);
         return os;
     }
-};
+
+    std::ostream& operator<<(std::ostream& os, OperatorType op);
+    std::ostream& operator<<(std::ostream& os, SymbolType op);
+}

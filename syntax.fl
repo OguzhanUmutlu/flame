@@ -98,14 +98,14 @@ class Vec3 {
 
 enum class SomeEnum {
     A, // defaults to indexing at 0
-    B; // 1
+    B  // 1
 }
 
 enum class OtherEnum {
     A = 5,  // starts at 5
     B,      // 6
     C = 10, // can set manually
-    D;      // 11
+    D       // 11
 }
 
 enum class CharEnum {
@@ -113,7 +113,7 @@ enum class CharEnum {
     B,        // 'b'
     C,        // 'c'
     D := 'y', // allows setting manually
-    E;        // 'e' // continues from last pattern
+    E         // 'e' // continues from last pattern
 }
 
 enum class StringEnum {
@@ -121,7 +121,7 @@ enum class StringEnum {
     World,           // "World"
     Foo,             // "Foo"
     Bar := "Baz",    // allows setting manually
-    Qux;             // "Qux"
+    Qux              // "Qux"
 }
 
 enum class LowerEnum {
@@ -132,7 +132,7 @@ enum class LowerEnum {
     Qux,             // "qux"
     Plugh = "Plugh", // allows switching rules mid-enum
     Xyzzy,           // "Xyzzy"
-    Thud;            // "Thud"
+    Thud             // "Thud"
 }
 
 fun std.hash(vec: Vec3) {

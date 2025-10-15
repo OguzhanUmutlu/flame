@@ -56,6 +56,8 @@ ScopeExpr(body: Stmt[])
 IdentifierTypeExpr(id: VariableExpr | PropertyExpr, arguments: TypeExpr[])
 OptionalTypeExpr(type: TypeExpr)
 FunctionTypeExpr(params: TypeExpr[], returnType: TypeExpr | NoneNode)
+ReferenceTypeExpr(expr: TypeExpr)
+DefaultTypeExpr(expr: TypeExpr, default: Expr)
 
 Parameter(ref: bool, id: IdentifierToken, type: TypeExpr | NoneNode, default: Expr | NoneNode)
 Generic(id: IdentifierToken, constraint: TypeExpr | NoneNode)
@@ -98,47 +100,42 @@ FunctionStmt(
     returnType: TypeExpr | NoneNode,
     body: Stmt[]
 )
-BinaryOpFunctionStmt(
+OperatorFunctionStmt(
     visibility: PropVisibility,
-    id: VariableExpr | PropertyExpr,
+    id: VariableExpr | PropertyExpr | NoneNode,
+    op: Token,
     generics: Generic[],
     params: Parameter[],
-    returnType: TypeExpr | NoneNode,
-    body: Stmt[]
-)
-UnaryOpFunctionStmt(
-    visibility: PropVisibility,
-    id: VariableExpr | PropertyExpr,
-    generics: Generic[],
-    param: Parameter?,
     returnType: TypeExpr | NoneNode,
     body: Stmt[]
 )
 GetFunctionStmt(
     visibility: PropVisibility,
     id: VariableExpr | PropertyExpr,
+    generics: Generic[],
     returnType: TypeExpr | NoneNode,
     body: Stmt[]
 )
 SetFunctionStmt(
     visibility: PropVisibility,
     id: VariableExpr | PropertyExpr,
-    params: Parameter?,
+    generics: Generic[],
+    param: Parameter,
     body: Stmt[]
 )
 ClassStmt(
     enum: bool,
     id: VariableExpr | PropertyExpr,
     generics: Generic[],
-    superClass: VariableExpr | PropertyExpr | NoneNode,
-    properties: VariableDefineStmt[],
-    getters: GetFunctionStmt[],
-    setters: SetFunctionStmt[],
-    methods: FunctionStmt[],
-    staticMethods: FunctionStmt[],
-    constructor: FunctionStmt | NoneNode,
-    binaryOperators: BinaryOpFunctionStmt[],
-    unaryOperators: UnaryOpFunctionStmt[],
+    extends: VariableExpr | PropertyExpr | NoneNode,
+    interfaces: (VariableExpr | PropertyExpr)[],
+    statements: Stmt[],
     enumMembers: EnumMember[]
+)
+InterfaceStmt(
+    id: VariableExpr | PropertyExpr,
+    generics: Generic[],
+    extends: (VariableExpr | PropertyExpr)[],
+    statements: Stmt[]
 )
 ```
