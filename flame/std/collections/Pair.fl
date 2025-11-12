@@ -1,6 +1,6 @@
 package std
 
-class Pair<K, V> {
+struct Pair<K, V> {
     var first: K
     var second: V
 

@@ -58,7 +58,7 @@ fun otherFun<T : number>(a: T, b: T) {
     return a + b
 }
 
-class Complex {
+struct Complex {
     init(public val re: f64, public val im: f64) {}
 
     operator +(other: Complex): Complex {
@@ -74,7 +74,7 @@ val i = Complex(0, 1)
 
 var x = 5 + 7*i
 
-class Vec2 {
+struct Vec2 {
     init(public val x: f32, public val y: f32) {}
 
     operator +(other: Vec2): Vec2 {
@@ -82,7 +82,7 @@ class Vec2 {
     }
 }
 
-class Vec3 {
+struct Vec3 {
     init(public val x: f32, public val y: f32, public val z: f32) {}
 
     operator +(other: Vec3) {
@@ -96,19 +96,19 @@ class Vec3 {
     }
 }
 
-enum class SomeEnum {
+enum struct SomeEnum {
     A, // defaults to indexing at 0
     B  // 1
 }
 
-enum class OtherEnum {
+enum struct OtherEnum {
     A = 5,  // starts at 5
     B,      // 6
     C = 10, // can set manually
     D       // 11
 }
 
-enum class CharEnum {
+enum struct CharEnum {
     A = 'a',  // understands char values
     B,        // 'b'
     C,        // 'c'
@@ -116,7 +116,7 @@ enum class CharEnum {
     E         // 'e' // continues from last pattern
 }
 
-enum class StringEnum {
+enum struct StringEnum {
     Hello = "Wello", // understands string values
     World,           // "World"
     Foo,             // "Foo"
@@ -124,7 +124,7 @@ enum class StringEnum {
     Qux              // "Qux"
 }
 
-enum class LowerEnum {
+enum struct LowerEnum {
     Hello = "hello", // understands lowercase string values
     World,           // "world"
     Foo,             // "foo"
@@ -166,7 +166,7 @@ for (x in -10) { // same as -10:0
 while (x != 0) x--
 do x-- while (x != 0)
 
-class Duration : usize {
+struct Duration : usize {
     fun get inSeconds() = this / 1000
     fun get inMinutes() = this / 60000
     fun get inHours() = this / 3600000
