@@ -1,0 +1,12 @@
+package std
+
+import std.RawPtr
+
+fun hash(x: bool) = x as usize
+fun hash(x: u8 | u16 | u32 | u64 | usize | i8 | i16 | i32 | i64) {
+    val h = ((x as usize) ^ 0x9E3779B97F4A7C15) * 0xD6E8FEB86659FD93
+    return h ^ (h >> 32)
+}
+fun hash(x: f32 | f64) = hash((x as f64).to_bits())
+fun hash(x: char) = hash(x as u32)
+fun hash(x: RawPtr) = (x as usize) >> 3

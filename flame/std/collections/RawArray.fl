@@ -1,0 +1,62 @@
+package std
+
+import std.RawPtr
+import std.types.Arguments
+
+struct RawArray<T> {
+    data: RawPtr<T>
+    private _size: usize
+    get size() = this._size
+
+    init(size: usize) {
+        this.data.unsafe_allocate(size)
+        this._size = size
+    }
+
+    is_null() {
+        return this.data.is_null()
+    }
+
+    emplace_at_unchecked(index: usize, ...args: Arguments<T.init>) {
+        this.data.emplace_at(index, ...args)
+    }
+
+    get_unchecked(index: usize): T& {
+        return this.data[index]
+    }
+
+    set_unchecked(index: usize, value: T) {
+        this.data[index] = value
+    }
+
+    emplace_at(index: usize, ...args: Arguments<T.init>) {
+        if (index < 0 || index >= this._size) return
+        this.data[index] = T(...args)
+    }
+
+    operator [](index: usize): T&? {
+        if (index < 0 || index >= this._size) return null
+        return this.data[index]
+    }
+
+    operator []=(index: usize, value: T) {
+        if (index < 0 || index >= this._size) return
+        this.data[index] = value
+    }
+
+    resize(size: usize) {
+        this.data.resize(size)
+        this._size = size
+    }
+
+    operator copy(r: RawArray<T>&) {
+        r.data.unsafe_allocate(this.size)
+        for (val i in this.size) {
+            r.set_unchecked(i, this.get_unchecked(i))
+        }
+    }
+
+    operator delete() {
+        this.data.clear()
+    }
+}

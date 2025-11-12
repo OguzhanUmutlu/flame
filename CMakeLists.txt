@@ -6,6 +6,8 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(LLVM CONFIG REQUIRED)
+# find_package(PkgConfig REQUIRED)
+# pkg_check_modules(gmpxx REQUIRED IMPORTED_TARGET gmpxx)
 
 list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
 include(HandleLLVMOptions)
@@ -20,7 +22,8 @@ add_executable(flame src/main.cpp
         src/parser.cpp
         src/arena.hpp
         src/utfcpp/utf8.h
-        src/analyzer.hpp
+        src/compiler.hpp
+        src/compiler.cpp
 )
 
 target_include_directories(flame PRIVATE ${LLVM_INCLUDE_DIRS})
@@ -28,6 +31,7 @@ target_include_directories(flame PRIVATE ${LLVM_INCLUDE_DIRS})
 llvm_map_components_to_libnames(llvm_libs Support Core IRReader)
 
 target_link_libraries(flame PRIVATE ${llvm_libs})
+# target_link_libraries(main PkgConfig::gmpxx)
 
 if (NOT MSVC)
     target_link_libraries(flame PRIVATE m)

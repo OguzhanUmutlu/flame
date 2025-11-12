@@ -1,0 +1,9 @@
+package std
+
+fun 
+
+fun print(...args) {
+    for (val arg in args) {
+        std.io.write(arg.to_string())
+    }
+}

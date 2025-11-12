@@ -1,0 +1,22 @@
+package std.Exception
+
+struct NullPointerException {
+    using Exception
+    get message() = "Null pointer dereference"
+}
+
+struct IndexOutOfBoundsException {
+    using Exception
+    get message() = "Index out of bounds"
+}
+
+struct IllegalOperationException {
+    using Exception
+    private msg: String
+
+    init(msg: String) {
+        this.msg = msg
+    }
+
+    get message() = this.msg
+}

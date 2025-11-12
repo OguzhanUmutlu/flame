@@ -1,0 +1,39 @@
+package std
+
+import std.{RawPtr, IgnoreUnsafe}
+import std.types.{SizesOf, ElementType}
+
+// A union type that allocates on the heap, uses less memory than Union but is slower due to heap allocation
+@IgnoreUnsafe
+struct HeapUnion<...Ts> {
+    private type: usize
+    private data: RawPtr<usize> // Doesn't matter what type, just needs to be a pointer, acts like a void*
+
+    init<U : ElementType<Ts>>(value: U) {
+        this.type = Ts.index_of(U)
+        this.data.allocate(U)
+    }
+
+    is_null() {
+        return this.data.is_null()
+    }
+
+    operator cast<U : ElementType<Ts>>(): U& {
+        if (this.type != Ts.index_of(U)) {
+            throw IllegalOperationException("Invalid union cast")
+        }
+
+        return (this.data as RawPtr<U>).ref()
+    }
+
+    operator delete() {
+        for (val i in Ts.size) {
+            if (this.type == i) {
+                delete this.data
+                return
+            }
+        }
+
+        throw IllegalOperationException("Invalid union type on delete")
+    }
+}

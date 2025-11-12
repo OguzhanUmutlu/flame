@@ -1,0 +1,219 @@
+package std.hash
+
+import std.{List, string, IgnoreUnsafe}
+
+val c32: u32[6] = [
+    0xa0761d65,
+    0xe7037ed1,
+    0x8ebc6af1,
+    0x589965cd,
+    0x1d8e4e27,
+    0xeb44accb
+]
+
+val c64: u64[6] = [
+    0xa0761d6478bd642f,
+    0xe7037ed1a0b428db,
+    0x8ebc6af09c88c6e3,
+    0x589965cc75374cc3,
+    0x1d8e4e27c47d124f,
+    0xeb44accab455d165
+]
+
+fun ROTL64(x: u64, n: i32) = (x << n) | (x >> (64 - n))
+
+fun wtm(A: u64, B: u64) {
+    val r = A * B
+    return r - (r >> 32)
+}
+
+fun wtm64(A: u64, B: u64) {
+    val r = (A ^ ROTL64(B, 39)) * (B ^ ROTL64(A, 39))
+    return r - (r >> 32)
+}
+
+fun w8(u8: RawPtr<u8>) = u8.get() as u64
+
+fun w16(u8: RawPtr<u8>) {
+    var r: u16 = 0
+    u8.memcpy(r, 2)
+    return r as u64
+}
+
+fun w32(u8: RawPtr<u8>) {
+    var r: u32 = 0
+    u8.memcpy(r, 4)
+    return r as u64
+}
+
+fun w64(u8: RawPtr<u8>) {
+    var r: u64 = 0
+    u8.memcpy(r, 8)
+    return r
+}
+
+fun _w64(u8: RawPtr<u8>) {
+    return (w32(p) << 32) | w32(p + 4)
+}
+
+fun wyhash32(key: string, seed: u64) {
+    return wyhash<u32>(key.data, seed)
+}
+
+fun wyhash64(key: string, seed: u64) {
+    return wyhash<u64>(key.data, seed)
+}
+
+@IgnoreUnsafe
+fun wyhash32(key: List<u8>, seed: u64) {
+    return wyhash<u32>(key.data, seed)
+}
+
+@IgnoreUnsafe
+fun wyhash64(key: List<u8>, seed: u64) {
+    return wyhash<u64>(key.data, seed)
+}
+
+fun wyhash<T>(key: RawArray<u8>, seed: u64): T {
+    var p = key.data
+    val len = key.size
+    val c = T == u32 ? c32 : c64
+    val i: u32 = 0
+    while (i + 16 <= len) {
+        seed = wtm(
+			wtm(w32(p) ^ c[1], w32(p + 4) ^ c[2]) + seed,
+			wtm(w32(p + 8) ^ c[3], w32(p + 12) ^ c[4])
+        )
+        i += 16
+        p += 16
+    }
+	seed += c[5]
+	seed = switch (len & 15) {
+	    1  => wtm(c[2] ^ seed, w8(p) ^ c[1])
+	    2  => wtm(c[3] ^ seed, w16(p) ^ c[4])
+	    3  => wtm(w16(p) ^ seed, w8(p + 2) ^ c[2])
+	    4  => wtm(w16(p) ^ seed, w16(p + 2) ^ c[3])
+	    5  => wtm(w32(p) ^ seed, w8(p + 4) ^ c[1])
+	    6  => wtm(w32(p) ^ seed, w16(p + 4) ^ c[1])
+	    7  => wtm(w32(p) ^ seed, (w16(p + 4) << 8 | w8(p + 6)) ^ c[1])
+	    8  => wtm(w32(p) ^ seed, w32(p + 4) ^ c[0])
+	    9  => wtm(w32(p) ^ seed, w32(p + 4) ^ c[2]) ^ wtm(seed ^ c[4], w8(p + 8) ^ c[3])
+	    10 => wtm(w32(p) ^ seed, w32(p + 4) ^ c[2]) ^ wtm(seed, w16(p + 8) ^ c[3])
+	    11 => wtm(w32(p) ^ seed, w32(p + 4) ^ c[2]) ^ wtm(seed, ((w16(p + 8) << 8) | w8(p + 10)) ^ c[3])
+	    12 => wtm(w32(p) ^ seed, w32(p + 4) ^ c[2]) ^ wtm(seed ^ w32(p + 8), c[4])
+	    13 => wtm(w32(p) ^ seed, w32(p + 4) ^ c[2]) ^ wtm(seed ^ w32(p + 8), (w8(p + 12)) ^ c[4])
+	    14 => wtm(w32(p) ^ seed, w32(p + 4) ^ c[2]) ^ wtm(seed ^ w32(p + 8), (w16(p + 12)) ^ c[4])
+	    15 => wtm(w32(p) ^ seed, w32(p + 4) ^ c[2]) ^ wtm(seed ^ w32(p + 8), (w16(p + 12) << 8 | w8(p + 14)) ^ c[4])
+	}
+	seed = (seed ^ seed << 16) * (len ^ c[0])
+	return T == u32 ? (seed - (seed >> 32)) as u32 : seed - (seed >> 31) + (seed << 33)
+}
+
+fun woothash(key: RawArray<u8>, len: u64, seed: u64) {
+    val p = key.data
+    var i: u64
+    var a = seed ^ _wootp4
+    var b = ROTL64(seed, 17) ^ _wootp3
+    var c = ROTL64(seed, 31) ^ _wootp2
+    var d = ROTL64(seed, 47) ^ _wootp1
+    for (i = 0; i + 32 <= len; i += 32, p += 32) {
+        a = (w64(p) ^ a) * _wootp1
+        a = ROTL64(a, 22)
+        a *= _wootp3
+        b = (w64(p +  8) ^ b) * _wootp2
+        b = ROTL64(b, 25)
+        b *= _wootp4
+        c = (w64(p + 16) ^ c) * _wootp3
+        c = ROTL64(c, 28)
+        c *= _wootp5
+        d = (w64(p + 24) ^ d) * _wootp4
+        d = ROTL64(d, 31)
+        d *= _wootp1
+        seed += a + b + c + d
+    }
+    seed += _wootp5
+    seed = switch (len & 31) {
+        1  => wtm64(seed, w8(p) ^ _wootp1)
+        2  => wtm64(seed, w16(p) ^ _wootp1)
+        3  => wtm64(seed, ((w16(p) << 8) | w8(p + 2)) ^ _wootp1)
+        4  => wtm64(seed, w32(p) ^ _wootp1)
+        5  => wtm64(seed, ((w32(p) << 8) | w8(p + 4)) ^ _wootp1)
+        6  => wtm64(seed, ((w32(p) << 16) | w16(p + 4)) ^ _wootp1)
+        7  => wtm64(seed, ((w32(p) << 24) | (w16(p + 4) << 8) | w8(p + 6)) ^ _wootp1)
+        8  => wtm64(seed, _w64(p) ^ _wootp1)
+        9  => wtm64(_w64(p) + seed, w8(p + 8) ^ _wootp2)
+       10  => wtm64(_w64(p) + seed, w16(p + 8) ^ _wootp2)
+       11  => wtm64(_w64(p) + seed, ((w16(p + 8) << 8) | w8(p + 8 + 2)) ^ _wootp2)
+       12  => wtm64(_w64(p) + seed, w32(p + 8) ^ _wootp2)
+       13  => wtm64(_w64(p) + seed, ((w32(p + 8) << 8) | w8(p + 8 + 4)) ^ _wootp2)
+       14  => wtm64(_w64(p) + seed, ((w32(p + 8) << 16) | w16(p + 8 + 4)) ^ _wootp2)
+       15  => wtm64(_w64(p) + seed, ((w32(p + 8) << 24) | (w16(p + 8 + 4) << 8) | w8(p + 8 + 6)) ^ _wootp2)
+       16  => wtm64(_w64(p) + seed, _w64(p + 8) + _wootp2)
+       17  => wtm64(_w64(p) + seed, w32(p + 8) + _wootp2) + wtm64(w32(p + 12) ^ seed, w8(p + 16) ^ _wootp3)
+       18  => wtm64(_w64(p) + seed, w32(p + 8) + _wootp2) + wtm64(w32(p + 12) ^ seed, w16(p + 16) ^ _wootp3)
+       19  => wtm64(_w64(p) + seed, w32(p + 8) + _wootp2) + wtm64(w32(p + 12) ^ seed, ((w16(p + 16) << 8) | w8(p + 16 + 2)) ^ _wootp3)
+       20  => wtm64(_w64(p) + seed, w32(p + 8) + _wootp2) + wtm64(w32(p + 12) ^ seed, w32(p + 16) ^ _wootp3)
+       21  => wtm64(_w64(p) + seed, _w64(p + 8) + _wootp2) + wtm64(w16(p + 16) ^ seed, ((w16(p + 18) << 8) | w8(p + 16 + 4)) ^ _wootp3)
+       22  => wtm64(_w64(p) + seed, _w64(p + 8) + _wootp2) + wtm64(w16(p + 16) ^ seed, (w32(p + 18) << 16) ^ _wootp3)
+       23  => wtm64(_w64(p) + seed, _w64(p + 8) + _wootp2) + wtm64(_wootp4 + seed, ((w32(p + 16) << 24) | (w16(p + 16 + 4) << 8) | w8(p + 16 + 6)) ^ _wootp3)
+       24  => wtm64(_w64(p) + seed, _w64(p + 8) + _wootp2) + wtm64(_w64(p + 16) + seed, seed ^ _wootp3)
+       25  => wtm64(_w64(p) + seed, _w64(p + 8) + _wootp2) + wtm64(_w64(p + 16) ^ seed, w8(p + 24) ^ _wootp4)
+       26  => wtm64(_w64(p) + seed, _w64(p + 8) + _wootp2) + wtm64(_w64(p + 16) ^ seed, w16(p + 24) ^ _wootp4)
+       27  => wtm64(_w64(p) + seed, _w64(p + 8) + _wootp2) + wtm64(_w64(p + 16) ^ seed, ((w16(p + 24) << 8) | w8(p + 24 + 2)) ^ _wootp4)
+       28  => wtm64(_w64(p) + seed, _w64(p + 8) + _wootp2) + wtm64(_w64(p + 16) ^ seed, w32(p + 24) ^ _wootp4)
+       29  => wtm64(_w64(p) + seed, _w64(p + 8) + _wootp2) + wtm64(_w64(p + 16) ^ seed, ((w32(p + 24) << 8) | w8(p + 24 + 4)) ^ _wootp4)
+       30  => wtm64(_w64(p) + seed, _w64(p + 8) + _wootp2) + wtm64(_w64(p + 16) ^ seed, ((w32(p + 24) << 16) | w16(p + 24 + 4)) ^ _wootp4)
+       31  => wtm64(_w64(p) + seed, _w64(p + 8) + _wootp2) + wtm64(_w64(p + 16) ^ seed, ((w32(p + 24) << 24) | (w16(p + 24 + 4) << 8) | w8(p + 24 + 6)) ^ _wootp4)
+    }
+    seed = (seed ^ seed << 16) * (len ^ _wootp0 ^ seed >> 32)
+    return seed - (seed >> 31) + (seed << 33)
+}
+
+fun woot32(key: RawArray<u8>, len: u64, seed: u64) {
+    const uint8_t *p = (const uint8_t*)key
+    uint64_t i, a = seed ^ _wootp4, b = ROTL64(seed, 17) ^ _wootp3, c = ROTL64(seed, 31) ^ _wootp2, d = ROTL64(seed, 47) ^ _wootp1
+    for (i = 0; i + 32 <= len i += 32, p += 32)
+    {
+        a = (w64(p     ) ^ a) * _wootp1 a = ROTL64(a, 22) a *= _wootp3
+        b = (w64(p +  8) ^ b) * _wootp2 b = ROTL64(b, 25) b *= _wootp4
+        c = (w64(p + 16) ^ c) * _wootp3 c = ROTL64(c, 28) c *= _wootp5
+        d = (w64(p + 24) ^ d) * _wootp4 d = ROTL64(d, 31) d *= _wootp1
+        seed += a + b + c + d
+    }
+    seed += _wootp5
+    switch (len & 31) {
+    case    1:  seed = _wootmum(seed, w8(p) ^ _wootp1)   break
+    case    2:  seed = _wootmum(seed, w16(p) ^ _wootp1)   break
+    case    3:  seed = _wootmum(seed, ((w16(p) << 8) | w8(p + 2)) ^ _wootp1)    break
+    case    4:  seed = _wootmum(seed, w32(p) ^ _wootp1)   break
+    case    5:  seed = _wootmum(seed, ((w32(p) << 8) | w8(p + 4)) ^ _wootp1)    break
+    case    6:  seed = _wootmum(seed, ((w32(p) << 16) | w16(p + 4)) ^ _wootp1)   break
+    case    7:  seed = _wootmum(seed, ((w32(p) << 24) | (w16(p + 4) << 8) | w8(p + 6)) ^ _wootp1)  break
+    case    8:  seed = _wootmum(seed, _w64(p) ^ _wootp1)  break
+    case    9:  seed = _wootmum(_w64(p) + seed, w8(p + 8) ^ _wootp2)    break
+    case    10: seed = _wootmum(_w64(p) + seed, w16(p + 8) ^ _wootp2)    break
+    case    11: seed = _wootmum(_w64(p) + seed, ((w16(p + 8) << 8) | w8(p + 8 + 2)) ^ _wootp2)
+    case    12: seed = _wootmum(_w64(p) + seed, w32(p + 8) ^ _wootp2)    break
+    case    13: seed = _wootmum(_w64(p) + seed, ((w32(p + 8) << 8) | w8(p + 8 + 4)) ^ _wootp2)
+    case    14: seed = _wootmum(_w64(p) + seed, ((w32(p + 8) << 16) | w16(p + 8 + 4)) ^ _wootp2)    break
+    case    15: seed = _wootmum(_w64(p) + seed, ((w32(p + 8) << 24) | (w16(p + 8 + 4) << 8) | w8(p + 8 + 6)) ^ _wootp2)   break
+    case    16: seed = _wootmum(_w64(p) + seed, _w64(p + 8) + _wootp2)   break
+    case    17: seed = _wootmum(_w64(p) + seed, w32(p + 8) + _wootp2) + _wootmum(w32(p + 12) ^ seed, w8(p + 16) ^ _wootp3)    break
+    case    18: seed = _wootmum(_w64(p) + seed, w32(p + 8) + _wootp2) + _wootmum(w32(p + 12) ^ seed, w16(p + 16) ^ _wootp3)    break
+    case    19: seed = _wootmum(_w64(p) + seed, w32(p + 8) + _wootp2) + _wootmum(w32(p + 12) ^ seed, ((w16(p + 16) << 8) | w8(p + 16 + 2)) ^ _wootp3)    break
+    case    20: seed = _wootmum(_w64(p) + seed, w32(p + 8) + _wootp2) + _wootmum(w32(p + 12) ^ seed, w32(p + 16) ^ _wootp3)    break
+    case    21: seed = _wootmum(_w64(p) + seed, _w64(p + 8) + _wootp2) + _wootmum(w16(p + 16) ^ seed, ((w16(p + 18) << 8) | w8(p + 16 + 4)) ^ _wootp3)   break
+    case    22: seed = _wootmum(_w64(p) + seed, _w64(p + 8) + _wootp2) + _wootmum(w16(p + 16) ^ seed, (w32(p + 18) << 16) ^ _wootp3)   break
+    case    23: seed = _wootmum(_w64(p) + seed, _w64(p + 8) + _wootp2) + _wootmum(_wootp4 + seed, ((w32(p + 16) << 24) | (w16(p + 16 + 4) << 8) | w8(p + 16 + 6)) ^ _wootp3)
+    case    24: seed = _wootmum(_w64(p) + seed, _w64(p + 8) + _wootp2) + _wootmum(w32(p + 16) + seed, w32(p + 16 + 4) ^ _wootp3)   break
+    case    25: seed = _wootmum(_w64(p) + seed, _w64(p + 8) + _wootp2) + _wootmum(_w64(p + 16) ^ seed, w8(p + 24) ^ _wootp4)  break
+    case    26: seed = _wootmum(_w64(p) + seed, _w64(p + 8) + _wootp2) + _wootmum(_w64(p + 16) ^ seed, w16(p + 24) ^ _wootp4)  break
+    case    27: seed = _wootmum(_w64(p) + seed, _w64(p + 8) + _wootp2) + _wootmum(_w64(p + 16) ^ seed, ((w16(p + 24) << 8) | w8(p + 24 + 2)) ^ _wootp4)  break
+    case    28: seed = _wootmum(_w64(p) + seed, _w64(p + 8) + _wootp2) + _wootmum(_w64(p + 16) ^ seed, w32(p + 24) ^ _wootp4)  break
+    case    29: seed = _wootmum(_w64(p) + seed, _w64(p + 8) + _wootp2) + _wootmum(_w64(p + 16) ^ seed, ((w32(p + 24) << 8) | w8(p + 24 + 4)) ^ _wootp4)  break
+    case    30: seed = _wootmum(_w64(p) + seed, _w64(p + 8) + _wootp2) + _wootmum(_w64(p + 16) ^ seed, ((w32(p + 24) << 16) | w16(p + 24 + 4)) ^ _wootp4)
+    case    31: seed = _wootmum(_w64(p) + seed, _w64(p + 8) + _wootp2) + _wootmum(_w64(p + 16) ^ seed, ((w32(p + 24) << 24) | (w16(p + 24 + 4) << 8) | w8(p + 24 + 6)) ^ _wootp4)   break
+    }
+    seed = (seed ^ seed << 16) * (len ^ _wootp0 ^ seed >> 32)
+    return (uint32_t)(seed - (seed >> 32))
+}

@@ -1,0 +1,56 @@
+package std
+
+import std.{RawArray, IgnoreUnsafe, IndexOutOfBoundsException}
+import std.mem.Box
+import std.types.Arguments
+
+// Boxes RawArray, no capacity just size, simple dynamic array
+struct Array<T> {
+    @IgnoreUnsafe
+    private data: Box<RawArray<T>>
+    get size() = data.size
+    @Unsafe
+    get _raw(): RawArray<T>& = data.get()
+
+    init(size: usize) {
+        this.data = Box<RawArray<T>>(size)
+    }
+
+    emplace_at_unchecked(index: usize, ...args: Arguments<T.init>) {
+        this.data.emplace_at_unchecked(index, ...args)
+    }
+
+    get_unchecked(index: usize): T& {
+        return this.data.get_unchecked(index)
+    }
+
+    set_unchecked(index: usize, value: T) {
+        this.data.set_unchecked(index, value)
+    }
+
+    emplace_at(index: usize, ...args: Arguments<T.init>) {
+        if (index < 0 || index >= this.size) {
+            throw IndexOutOfBoundsException()
+        }
+        this.emplace_at_unchecked(index, ...args)
+    }
+
+    operator [](index: usize): T&? {
+        return this.data[index]
+    }
+
+    operator []=(index: usize, value: T) {
+        this.data[index] = value
+    }
+
+    operator copy() {
+        this.data = Box<RawArray<T>>(from.size)
+        for (val i in from.size) {
+            this.data.set_unchecked(i, from.get_unchecked(i) as T)
+        }
+    }
+
+    resize(size: usize) {
+        this.data.resize(size)
+    }
+}

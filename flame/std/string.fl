@@ -1,0 +1,15 @@
+package std
+
+fun to_string(val: string) = val
+
+struct string {
+    private data: List<u8>
+    get size() = data.size
+    
+}
+
+fun hash(x: string) : usize {
+    var h: usize = 0
+    for (val c in x) h = h * 31 + hash(c)
+    return h
+}

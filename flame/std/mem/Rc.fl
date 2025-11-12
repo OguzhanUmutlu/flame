@@ -1,0 +1,43 @@
+package std.mem
+
+import std.{RawPtr, Pair, Arguments, NullPointerException}
+
+struct Rc<T> {
+    @IgnoreUnsafe
+    private data: RawPtr<Pair<T, usize>>
+
+    using T {
+        if (this.is_null()) throw NullPointerException()
+        return this.data.first
+    }
+
+    init(...args: Arguments<T.init>) {
+        this.data.unsafe_allocate() // no-init
+        this.data.first = T(...args)
+        this.data.second = 1
+    }
+
+    fun get(): T& {
+        if (this.data.is_null()) {
+            throw NullPointerException()
+        }
+        return this.data.get()
+    }
+
+    is_null() {
+        return this.data.is_null()
+    }
+
+    operator copy(r: Rc<T>&) {
+        if (this.is_null()) {
+            throw NullPointerException()
+        }
+        this.data.second++
+        r.data = this.data
+    }
+
+    operator delete() {
+        this.data.second--
+        if (this.data.second == 0) this.data.clear()
+    }
+}

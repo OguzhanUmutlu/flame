@@ -1,0 +1,123 @@
+package std
+
+import std.{IndexOutOfBoundsException, Array}
+import std.types.Arguments
+import std.mem.Box
+
+// A dynamic array
+struct List<T> {
+    private _size: usize
+
+    private data: Array<T>
+    get size() = _size
+    get capacity() = data.size
+    get array() = data
+
+    init() {
+        this._size = 0
+        this.data = Array<T>(4)
+    }
+
+    init(...elements: T[]) {
+        this._size = elements.size
+        this.data.resize(elements.size + (elements.size >> 1))
+        for (val i in elements.size) {
+            this.data[i] = elements[i]
+        }
+    }
+
+    reserve(r: usize) {
+        if (this.capacity < r) {
+            this.data.resize(r)
+        }
+    }
+
+    push(element: T) {
+        if (this._size + 1 > this.capacity) {
+            this.data.resize(this.capacity + (this.capacity >> 1))
+        }
+        this.data[this._size++] = element
+    }
+
+    emplace_at_unchecked(index: usize, ...args: Arguments<T.init>) {
+        for (val i in this._size down to index + 1) {
+            this.data[i] = this.data[i - 1]
+        }
+        this.data[index] = T(...args)
+        this._size++
+    }
+
+    get_unchecked(index: usize): T& {
+        return this.data.get_unchecked(index)
+    }
+
+    set_unchecked(index: usize, value: T) {
+        this.data.set_unchecked(index, value)
+    }
+
+    emplace_at(index: usize, ...args: Arguments<T.init>) {
+        if (index < 0 || index >= this.capacity) {
+            throw IndexOutOfBoundsException()
+        } 
+        this.emplace_at_unchecked(index, ...args)
+    }
+
+    emplace_back(...args: Arguments<T.init>) {
+        if (this._size >= this.capacity) {
+            this.data.resize(this.capacity + (this.capacity >> 1))
+        }
+        this.data.emplace_at_unchecked(this._size++, ...args)
+    }
+
+    pop(): T&? {
+        if (this._size == 0) return null
+        return this.data[this._size--]
+    }
+
+    back(): T&? {
+        if (this._size == 0) return null
+        return this.data[this._size - 1]
+    }
+
+    index_of(element: T): usize? {
+        for (val i in this._size) {
+            if (this.data[i] == element) return i
+        }
+        return null
+    }
+
+    find(search: (T) -> bool): T&? {
+        for (val i in this._size) {
+            if (search(this.data[i])) return this.data[i]
+        }
+        return null
+    }
+
+    find_index_of(search: (T) -> bool): usize? {
+        for (val i in this._size) {
+            if (search(this.data[i])) return i
+        }
+        return null
+    }
+
+    operator [](index: usize): T&? {
+        if (index < 0 || index >= this._size) return null
+        return this.data[index]
+    }
+
+    operator []=(index: usize, value: T) {
+        if (index < 0 || index >= this._size) return
+        this.data[index] = value
+    }
+
+    operator in(element: T) {
+        for (val i in 0..this._size) {
+            if (this.data[i] == element) return true
+        }
+        return false
+    }
+
+    shrink_to_fit() {
+        this.data.resize(this._size)
+    }
+}

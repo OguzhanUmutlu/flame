@@ -16,7 +16,7 @@
 static bool PrintTokenValue = true;
 
 namespace Flame {
-    static const std::string operators[] = {
+    static const string operators[] = {
         "<<=", ">>=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "@=",
 
         "&&", "||", "++", "--", "<<", ">>", "+", "-", "*", "/", "%", "!=", "!", "<=", ">=", "<", ">", "&", "|",
@@ -27,14 +27,15 @@ namespace Flame {
     static constexpr char symbols[] = {
         '(', ')', '{', '}', '[', ']', ',', ':', '.', '?'
     };
-    // You can freely edit any keyword, even use Unicode characters! Should be in the same order as TokenType enum
-    static const std::string keywords[] = {
+    // keyword "unsafe" is reserved for now, will be used later for unsafe code blocks and functions
+    // You can freely edit any keyword, even use Unicode characters! Should be in the same order as TokenType enum down below
+    static const string keywords[] = {
         "if", "else", "while", "for", "return", "fun", "struct",
         "import", "var", "val", "break", "continue", "when", "try",
         "catch", "finally", "throw", "get", "set", "default", "delete",
         "in", "as", "do", "alias", "enum", "public", "protected", "private",
         "operator", "interface", "extends", "implements", "true", "false",
-        "yield"
+        "yield", "unsafe", "move"
     };
 
     enum class TokenType {
@@ -51,28 +52,33 @@ namespace Flame {
         NewLine,
 
         Keywords,
+
         KeywordIf = Keywords, KeywordElse, KeywordWhile, KeywordFor, KeywordReturn, KeywordFun, KeywordStruct,
         KeywordImport, KeywordVar, KeywordVal, KeywordBreak, KeywordContinue, KeywordWhen, KeywordTry, KeywordCatch,
         KeywordFinally, KeywordThrow, KeywordGet, KeywordSet, KeywordDefault, KeywordDelete, KeywordIn, KeywordAs,
         KeywordDo, KeywordAlias, KeywordEnum, KeywordPublic, KeywordProtected, KeywordPrivate, KeywordOperator,
-        KeywordInterface, KeywordExtends, KeywordImplements, KeywordTrue, KeywordFalse, KeywordYield,
-        KeywordsEnd,
+        KeywordInterface, KeywordExtends, KeywordImplements, KeywordTrue, KeywordFalse, KeywordYield, KeywordUnsafe,
+        KeywordMove,
 
+        KeywordsEnd, // This is not a keyword, it's just marking the end of keywords
         Operators = KeywordsEnd,
 
         SetOperators   = Operators,
         OperatorSetShl = Operators, OperatorSetShr, OperatorSetAdd, OperatorSetSub, OperatorSetMul,
         OperatorSetDiv, OperatorSetMod, OperatorSetBitAnd, OperatorSetBitOr, OperatorSetBitXor,
-        OperatorSetMatMul, SetOperatorsEnd = OperatorSetMatMul,
+        OperatorSetMatMul,
 
+        SetOperatorsEnd = OperatorSetMatMul,
         NonSetOperators,
+
         OperatorAnd = NonSetOperators, OperatorOr, OperatorInc, OperatorDec, OperatorShl, OperatorShr,
         OperatorAdd, OperatorSub, OperatorMul, OperatorDiv, OperatorMod, OperatorNeq, OperatorNot, OperatorLte,
         OperatorGte, OperatorLt, OperatorGt, OperatorBitAnd, OperatorBitOr, OperatorBitXor, OperatorBitNot,
         OperatorMatMul, OperatorEq,
+
         NonSetOperatorsEnd = OperatorEq,
 
-        OperatorAssign,
+        OperatorAssign, // Special. '='
 
         OperatorsEnd = OperatorAssign,
 
@@ -99,7 +105,7 @@ namespace Flame {
         RightBracket, Comma, Semicolon, Colon, Dot, Question, Arrow
     };
 
-    static std::string GetTokenTypeName(TokenType type) {
+    static string getTokenTypeName(TokenType type) {
         if (type == TokenType::EndOfFile) return "EndOfFile";
         if (type == TokenType::Identifier) return "Identifier";
         if (type == TokenType::Integer) return "Integer";
@@ -114,47 +120,47 @@ namespace Flame {
         return "Symbol";
     }
 
-    std::string GetTokenValue(TokenType type);
+    string getTokenValue(TokenType type);
 
     struct TokenImpl {
-        std::string_view value;
+        string_view value;
 
         TokenImpl() = default;
 
-        explicit TokenImpl(std::string_view value) : value(value) {
+        explicit TokenImpl(string_view value) : value(value) {
         }
 
         TokenImpl(const char* start, size_t length) : value(start, length) {
         }
 
-        [[nodiscard]] static constexpr bool IsLiteral(TokenType type) {
+        [[nodiscard]] static constexpr bool isLiteral(TokenType type) {
             return type == TokenType::Integer || type == TokenType::Float || type == TokenType::Char
                 || type == TokenType::String || type == TokenType::KeywordTrue || type == TokenType::KeywordFalse;
         }
 
-        [[nodiscard]] static constexpr bool IsKeyword(TokenType type) {
+        [[nodiscard]] static constexpr bool isKeyword(TokenType type) {
             return type >= TokenType::Keywords && type < TokenType::KeywordsEnd;
         }
 
-        [[nodiscard]] static constexpr bool IsOperator(TokenType type) {
+        [[nodiscard]] static constexpr bool isOperator(TokenType type) {
             return type >= TokenType::Operators && type <= TokenType::OperatorsEnd;
         }
 
-        [[nodiscard]] static constexpr bool IsSymbol(TokenType type) {
+        [[nodiscard]] static constexpr bool isSymbol(TokenType type) {
             return type >= TokenType::Symbols && type < TokenType::SymbolsEnd;
         }
 
-        [[nodiscard]] static constexpr bool IsSetOperator(TokenType type) {
+        [[nodiscard]] static constexpr bool isSetOperator(TokenType type) {
             return type >= TokenType::SetOperators && type < TokenType::SetOperatorsEnd;
         }
 
-        [[nodiscard]] static constexpr bool IsNonSetOperator(TokenType type) {
+        [[nodiscard]] static constexpr bool isNonSetOperator(TokenType type) {
             return type >= TokenType::NonSetOperators && type < TokenType::NonSetOperatorsEnd;
         }
 
-        [[nodiscard]] std::int64_t GetInt() const {
-            std::string_view sv = value;
-            std::string cleaned;
+        [[nodiscard]] int64_t getInt() const {
+            string_view sv = value;
+            string cleaned;
 
             if (std::ranges::find(sv, '_') != sv.end()) {
                 cleaned.reserve(sv.size());
@@ -191,18 +197,18 @@ namespace Flame {
                 }
             }
 
-            std::int64_t result = 0;
+            int64_t result = 0;
             auto [ptr, ec] = std::from_chars(sv.data(), sv.data() + sv.size(), result, base);
             if (ec != std::errc() || ptr != sv.data() + sv.size()) {
-                throw std::runtime_error("Invalid integer literal" + std::string(value));
+                throw std::runtime_error("Invalid integer literal" + string(value));
             }
 
             return negative ? -result : result;
         }
 
-        [[nodiscard]] double GetFloat() const {
-            std::string_view sv = value;
-            std::string cleaned;
+        [[nodiscard]] double getFloat() const {
+            string_view sv = value;
+            string cleaned;
 
             if (std::ranges::find(sv, '_') != sv.end()) {
                 cleaned.reserve(sv.size());
@@ -217,14 +223,14 @@ namespace Flame {
             double result;
             auto [ptr, ec] = std::from_chars(sv.data(), sv.data() + sv.size(), result);
             if (ec != std::errc() || ptr != sv.data() + sv.size()) {
-                throw std::runtime_error("Invalid float literal: " + std::string(value));
+                throw std::runtime_error("Invalid float literal: " + string(value));
             }
             return result;
 #else
             char* endPtr = nullptr;
             double result = std::strtod(sv.data(), &endPtr);
             if (endPtr != sv.data() + sv.size()) {
-                throw std::runtime_error("Invalid float literal: " + std::string(value));
+                throw std::runtime_error("Invalid float literal: " + string(value));
             }
             return result;
 #endif
@@ -235,37 +241,41 @@ namespace Flame {
     struct TokenComp : TokenImpl {
         using TokenImpl::TokenImpl;
 
-        [[nodiscard]] static constexpr bool IsLiteral() {
-            return TokenImpl::IsLiteral(type);
+        [[nodiscard]] static constexpr bool isLiteral() {
+            return TokenImpl::isLiteral(type);
         }
 
-        [[nodiscard]] static constexpr bool IsKeyword() {
-            return TokenImpl::IsKeyword(type);
+        [[nodiscard]] static constexpr bool isKeyword() {
+            return TokenImpl::isKeyword(type);
         }
 
-        [[nodiscard]] static constexpr bool IsOperator() {
-            return TokenImpl::IsOperator(type);
+        [[nodiscard]] static constexpr bool isOperator() {
+            return TokenImpl::isOperator(type);
         }
 
-        [[nodiscard]] static constexpr bool IsSymbol() {
-            return TokenImpl::IsSymbol(type);
+        [[nodiscard]] static constexpr bool isSymbol() {
+            return TokenImpl::isSymbol(type);
         }
 
-        [[nodiscard]] static constexpr bool IsSetOperator() {
-            return TokenImpl::IsSetOperator(type);
+        [[nodiscard]] static constexpr bool isSetOperator() {
+            return TokenImpl::isSetOperator(type);
         }
 
-        [[nodiscard]] static constexpr bool IsNonSetOperator() {
-            return TokenImpl::IsNonSetOperator(type);
+        [[nodiscard]] static constexpr bool isNonSetOperator() {
+            return TokenImpl::isNonSetOperator(type);
         }
 
-        [[nodiscard]] constexpr TokenImpl Impl() const {
+        [[nodiscard]] constexpr TokenImpl impl() const {
             return static_cast<TokenImpl>(*this);
+        }
+
+        constexpr bool operator==(const TokenComp& rhs) const noexcept {
+            return value == rhs.value;
         }
     };
 
     template <TokenType T>
-    static std::ostream& operator<<(std::ostream& os, const TokenComp<T>& tok) {
+    static ostream& operator<<(ostream& os, const TokenComp<T>& tok) {
         if (PrintTokenValue) {
             os << '\'' << tok.value << '\'';
             return os;
@@ -298,7 +308,7 @@ namespace Flame {
         OperatorToken() : TokenImpl(), type(OperatorType::None) {
         }
 
-        OperatorToken(OperatorType type, const std::string_view& value)
+        OperatorToken(OperatorType type, const string_view& value)
             : TokenImpl(value), type(type) {
         }
 
@@ -309,19 +319,19 @@ namespace Flame {
 
         OperatorType type;
 
-        [[nodiscard]] constexpr bool IsSetOperator() const {
-            return TokenImpl::IsSetOperator(static_cast<TokenType>(type));
+        [[nodiscard]] constexpr bool isSetOperator() const {
+            return TokenImpl::isSetOperator(static_cast<TokenType>(type));
         }
 
-        [[nodiscard]] constexpr bool IsNonSetOperator() const {
-            return TokenImpl::IsNonSetOperator(static_cast<TokenType>(type));
+        [[nodiscard]] constexpr bool isNonSetOperator() const {
+            return TokenImpl::isNonSetOperator(static_cast<TokenType>(type));
         }
 
-        [[nodiscard]] constexpr TokenImpl Impl() const {
-            return static_cast<TokenImpl>(*this);
+        [[nodiscard]] TokenImpl impl() const {
+            return TokenImpl{value};
         }
 
-        friend std::ostream& operator<<(std::ostream& os, const OperatorToken& token) {
+        friend ostream& operator<<(ostream& os, const OperatorToken& token) {
             if (PrintTokenValue) {
                 os << '\'' << token.value << '\'';
                 return os;
@@ -332,7 +342,7 @@ namespace Flame {
     };
 
     struct SymbolToken : TokenImpl {
-        SymbolToken(SymbolType type, const std::string_view& value)
+        SymbolToken(SymbolType type, const string_view& value)
             : TokenImpl(value), type(type) {
         }
 
@@ -347,7 +357,7 @@ namespace Flame {
             return static_cast<TokenImpl>(*this);
         }
 
-        friend std::ostream& operator<<(std::ostream& os, const SymbolToken& token) {
+        friend ostream& operator<<(ostream& os, const SymbolToken& token) {
             if (PrintTokenValue) {
                 os << '\'' << token.value << '\'';
                 return os;
@@ -361,7 +371,7 @@ namespace Flame {
         Token() : TokenImpl(), type(TokenType::None) {
         }
 
-        Token(TokenType type, const std::string_view& value)
+        Token(TokenType type, const string_view& value)
             : TokenImpl(value), type(type) {
         }
 
@@ -372,28 +382,28 @@ namespace Flame {
 
         TokenType type;
 
-        [[nodiscard]] constexpr bool IsLiteral() const {
-            return TokenImpl::IsLiteral(type);
+        [[nodiscard]] constexpr bool isLiteral() const {
+            return TokenImpl::isLiteral(type);
         }
 
-        [[nodiscard]] constexpr bool IsKeyword() const {
-            return TokenImpl::IsKeyword(type);
+        [[nodiscard]] constexpr bool isKeyword() const {
+            return TokenImpl::isKeyword(type);
         }
 
-        [[nodiscard]] constexpr bool IsOperator() const {
-            return TokenImpl::IsOperator(type);
+        [[nodiscard]] constexpr bool isOperator() const {
+            return TokenImpl::isOperator(type);
         }
 
-        [[nodiscard]] constexpr bool IsSymbol() const {
-            return TokenImpl::IsSymbol(type);
+        [[nodiscard]] constexpr bool isSymbol() const {
+            return TokenImpl::isSymbol(type);
         }
 
-        [[nodiscard]] constexpr bool IsSetOperator() const {
-            return TokenImpl::IsSetOperator(type);
+        [[nodiscard]] constexpr bool isSetOperator() const {
+            return TokenImpl::isSetOperator(type);
         }
 
-        [[nodiscard]] constexpr bool IsArithmeticOperator() const {
-            return TokenImpl::IsNonSetOperator(type);
+        [[nodiscard]] constexpr bool isNonSetOperator() const {
+            return TokenImpl::isNonSetOperator(type);
         }
 
         template <TokenType T>
@@ -401,31 +411,31 @@ namespace Flame {
             return TokenComp<T>(value);
         }
 
-        [[nodiscard]] OperatorToken Op() const {
-            if (!IsOperator()) throw std::runtime_error("Token is not an operator");
+        [[nodiscard]] OperatorToken op() const {
+            if (!isOperator()) throw std::runtime_error("Token is not an operator");
             return {static_cast<OperatorType>(type), value};
         }
 
-        [[nodiscard]] constexpr OperatorType OpType() const {
-            if (!IsOperator()) throw std::runtime_error("Token is not an operator");
+        [[nodiscard]] constexpr OperatorType opType() const {
+            if (!isOperator()) throw std::runtime_error("Token is not an operator");
             return static_cast<OperatorType>(type);
         }
 
-        [[nodiscard]] SymbolToken Sym() const {
-            if (!IsSymbol()) throw std::runtime_error("Token is not a symbol");
+        [[nodiscard]] SymbolToken sym() const {
+            if (!isSymbol()) throw std::runtime_error("Token is not a symbol");
             return {static_cast<SymbolType>(type), value};
         }
 
-        [[nodiscard]] constexpr SymbolType SymType() const {
-            if (!IsSymbol()) throw std::runtime_error("Token is not a symbol");
+        [[nodiscard]] constexpr SymbolType symType() const {
+            if (!isSymbol()) throw std::runtime_error("Token is not a symbol");
             return static_cast<SymbolType>(type);
         }
 
-        [[nodiscard]] constexpr TokenImpl Impl() const {
+        [[nodiscard]] constexpr TokenImpl impl() const {
             return static_cast<TokenImpl>(*this);
         }
 
-        friend std::ostream& operator<<(std::ostream& os, const Token& token) {
+        friend ostream& operator<<(ostream& os, const Token& token) {
             if (PrintTokenValue) {
                 os << '\'' << token.value << '\'';
                 return os;
@@ -484,15 +494,15 @@ namespace Flame {
     constexpr auto BOLD = "\033[1m";
     constexpr auto RESET = "\033[0m";
 
-    [[nodiscard]] static constexpr bool IsDigit(utf8::utfchar32_t c) {
+    [[nodiscard]] static constexpr bool isDigit(utf8::utfchar32_t c) {
         return c >= '0' && c <= '9';
     }
 
-    [[nodiscard]] static constexpr bool IsNewLine(utf8::utfchar32_t c) {
+    [[nodiscard]] static constexpr bool isNewLine(utf8::utfchar32_t c) {
         return c == '\n' || c == 0x2028 || c == 0x2029;
     }
 
-    [[nodiscard]] static constexpr bool IsSpace(utf8::utfchar32_t c) {
+    [[nodiscard]] static constexpr bool isSpace(utf8::utfchar32_t c) {
         return c == ' ' || c == '\t' || c == '\r';
     }
 
@@ -540,7 +550,7 @@ namespace Flame {
         return utf8::prior(offset, start);
     }
 
-    [[nodiscard]] static bool StringStartsWith(const char* offset, const std::string& str) {
+    [[nodiscard]] static bool stringStartsWith(const char* offset, const string& str) {
         auto end = offset + str.length();
         auto strStart = str.data();
         auto strEnd = strStart + str.length();
@@ -551,52 +561,52 @@ namespace Flame {
     }
 
     struct FileTokenizer {
-        std::string filepath;
-        std::string _content;
+        string filepath;
+        string _content;
         char* it{nullptr};
         char* end{nullptr};
-        std::vector<Token> tokens;
+        vector<Token> tokens;
 
-        constexpr int GetOperator() const;
+        [[nodiscard]] constexpr int getOperator() const;
         void Tokenize();
 
-        [[nodiscard]] utf8::utfchar32_t Peek() const {
+        [[nodiscard]] utf8::utfchar32_t peek() const {
             return UTFPeek(it, end);
         }
 
-        [[nodiscard]] utf8::utfchar32_t Peek(int amount) const {
+        [[nodiscard]] utf8::utfchar32_t peek(int amount) const {
             return UTFPeek(it, end, amount);
         }
 
-        [[nodiscard]] utf8::utfchar32_t Next() {
+        [[nodiscard]] utf8::utfchar32_t next() {
             return UTFNext(it, end);
         }
 
-        void Skip() {
+        void skip() {
             UTFSkip(it, end);
         }
 
-        void SkipDigits() {
-            while (!Over()) {
-                auto c2 = Peek();
-                if (c2 != '_' && !IsDigit(c2)) break;
-                Skip();
+        void skipDigits() {
+            while (!over()) {
+                auto c2 = peek();
+                if (c2 != '_' && !isDigit(c2)) break;
+                skip();
             }
         }
 
-        [[nodiscard]] constexpr bool Over() const {
+        [[nodiscard]] constexpr bool over() const {
             return it >= end;
         }
 
-        void AddToken(TokenType type, char* offset, size_t length) {
+        void addToken(TokenType type, char* offset, size_t length) {
             tokens.emplace_back(type, offset, length);
         }
 
-        void AddToken(TokenType type, size_t length) {
+        void addToken(TokenType type, size_t length) {
             tokens.emplace_back(type, it, length);
         }
 
-        [[noreturn]] void ThrowError(const std::string& message, const char* offset, size_t length = 1) const {
+        [[noreturn]] void throwError(const string& message, const char* offset, size_t length = 1) const {
             auto start = _content.data();
             const char* constEnd = this->end;
             if (offset >= constEnd) {
@@ -604,18 +614,18 @@ namespace Flame {
                 utf8::prior(offset, start);
             }
 
-            if (IsNewLine(UTFPeek(offset, constEnd)) && UTFPeek(offset, constEnd, 1)) {
+            if (isNewLine(UTFPeek(offset, constEnd)) && UTFPeek(offset, constEnd, 1)) {
                 UTFSkip(offset, constEnd);
             }
 
-            std::vector<std::string_view> lines;
+            vector<string_view> lines;
             size_t wantedLine = 0;
             size_t walkLineIndex = 0;
             auto lineStart = start;
             auto pos = start;
             while (pos < constEnd) {
                 auto c = UTFPeek(pos, constEnd);
-                if (IsNewLine(c)) {
+                if (isNewLine(c)) {
                     if (offset >= lineStart && offset < pos) wantedLine = walkLineIndex;
                     lines.emplace_back(lineStart, pos - lineStart);
                     UTFSkip(pos, constEnd);
@@ -657,51 +667,74 @@ namespace Flame {
             exit(1);
         }
 
-        [[noreturn]] void ThrowError(const std::string& message, size_t length = 1) const {
-            ThrowError(message, it, length);
+        [[noreturn]] void throwError(const string& message, size_t length = 1) const {
+            throwError(message, it, length);
         }
 
-        [[noreturn]] void ThrowError(const std::string& message, const std::string_view& view) const {
-            ThrowError(message, view.data(), view.size());
+        [[noreturn]] void throwError(const string& message, const string_view& view) const {
+            throwError(message, view.data(), view.size());
         }
 
-        [[noreturn]] void ThrowError(const std::string& message, const TokenImpl& token) const {
-            ThrowError(message, token.value);
+        [[noreturn]] void throwError(const string& message, const TokenImpl& token) const {
+            throwError(message, token.value);
         }
     };
 
     struct Tokenizer {
-        std::unordered_map<std::string, FileTokenizer> files;
+        hashmap<string, FileTokenizer> files;
 
-        void Tokenize(const std::string& filepath) {
+        void tokenize(const string& filepath) {
             if (files.contains(filepath)) return;
             auto& tokenizer = files[filepath];
             tokenizer.filepath = filepath;
-            GetFileContent(filepath, tokenizer._content);
+            getFileContent(filepath, tokenizer._content);
             tokenizer.it = tokenizer._content.data();
             tokenizer.end = tokenizer._content.data() + tokenizer._content.size();
             tokenizer.Tokenize();
         }
 
-        [[noreturn]] void ThrowError(const std::string& message, const Token& token) const {
+        [[noreturn]] void throwError(const string& message, const Token& token) const {
             for (const auto& file : files | std::views::values) {
                 if (token.value.data() >= file._content.data()
                     && token.value.data() < file._content.data() + file._content.size()
                 ) {
-                    file.ThrowError(message, token);
+                    file.throwError(message, token);
                 }
             }
 
             throw std::runtime_error(message + " at unknown location");
         }
+
+        friend ostream& operator<<(ostream& os, const Tokenizer& tokenizer) {
+            os << "Tokenizer {\n";
+            for (const auto& pair : tokenizer.files) {
+                auto& [filename, file] = pair;
+                os << "  \"" << filename << "\": ";
+                printVecLine(os, file.tokens, "  ");
+                if (&pair != &*std::prev(tokenizer.files.end())) {
+                    os << ",\n";
+                }
+            }
+            os << "\n}";
+            return os;
+        }
     };
 
     template <TokenType T>
-    static std::ostream& operator<<(std::ostream& os, const std::vector<TokenComp<T>>& ls) {
-        PrintVec(os, ls);
+    static ostream& operator<<(ostream& os, const vector<TokenComp<T>>& ls) {
+        printVec(os, ls);
         return os;
     }
 
-    std::ostream& operator<<(std::ostream& os, OperatorType op);
-    std::ostream& operator<<(std::ostream& os, SymbolType op);
+    ostream& operator<<(ostream& os, OperatorType op);
+    ostream& operator<<(ostream& os, SymbolType op);
+}
+
+namespace std {
+    template <>
+    struct hash<Flame::TokenComp<Flame::TokenType::Identifier>> {
+        size_t operator()(const Flame::TokenComp<Flame::TokenType::Identifier>& p) const noexcept {
+            return hash<string_view>()(p.value);
+        }
+    };
 }

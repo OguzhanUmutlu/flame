@@ -1,0 +1,46 @@
+package std.mem
+
+import std.{RawPtr, Pair, NullPointerException}
+import std.atomic.{AtomicUsize, Ordering}
+import std.types.Arguments
+
+struct Arc<T> {
+    @IgnoreUnsafe
+    private data: RawPtr<Pair<T, AtomicUsize>>
+
+    using T {
+        if (this.is_null()) throw NullPointerException()
+        return this.data.first
+    }
+
+    init(...args: Arguments<T.init>) {
+        this.data.unsafe_allocate()
+        this.data.first = T(...args)
+        this.data.second = 1
+    }
+
+    fun get(): T& {
+        if (this.data.is_null()) {
+            throw NullPointerException()
+        }
+        return this.data.get()
+    }
+
+    is_null() {
+        return this.data.is_null()
+    }
+
+    operator copy(r: Arc<T>&) {
+        if (this.is_null()) throw NullPointerException()
+        this.data.second.fetch_add(1, Ordering.SeqCst)
+        r.data = this.data
+    }
+
+    operator delete() {
+        if (this.is_null()) return
+        let prev = this.data.second.fetch_sub(1, Ordering.SeqCst)
+        if (prev == 1) {
+            this.data.clear()
+        }
+    }
+}

@@ -1,0 +1,33 @@
+package std
+
+import std.{IgnoreUnsafe, IllegalOperationException}
+import std.types.{MaxSizesOf, ElementType}
+
+@IgnoreUnsafe
+struct Union<...Ts> {
+    // todo: alignment fixes
+    private type: usize
+    private data: u8[MaxSizesOf<...Ts>]
+
+    init<U : ElementType<Ts>>(value: U) {
+        this.type = Ts.index_of(U)
+        (this.data as RawPtr<U>).put(value)
+    }
+
+    operator cast<U : ElementType<Ts>>(): U& {
+        if (this.type != Ts.index_of(U)) {
+            throw IllegalOperationException("Invalid union cast")
+        }
+        return (this.data as RawPtr<U>).ref()
+    }
+
+    operator delete() {
+        for (val i in Ts.size) {
+            if (this.type == i) {
+                delete this.data
+                return
+            }
+        }
+        throw IllegalOperationException("Invalid union type on delete")
+    }
+}

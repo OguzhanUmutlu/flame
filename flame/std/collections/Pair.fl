@@ -1,0 +1,11 @@
+package std
+
+class Pair<K, V> {
+    var first: K
+    var second: V
+
+    init(first: K, second: V) {
+        this.first = first
+        this.second = second
+    }
+}

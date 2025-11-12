@@ -1,0 +1,43 @@
+package std
+
+import std.{RawPtr, NullPtr, NullPointerException, IllegalOperationException}
+import std.types.Arguments
+
+struct Box<T> {
+    @IgnoreUnsafe
+    private data: RawPtr<T>
+
+    init(...args: Arguments<T.init>) {
+        this.data.allocate(...args)
+    }
+
+    is_null() {
+        return this.data.is_null()
+    }
+
+    fun get(): T& {
+        if (this.data.is_null()) {
+            throw NullPointerException()
+        }
+        return this.data.get()
+    }
+
+    operator copy(r: Box<T>&) {
+        val r = this.data.get()
+        this.data = Box<RawArray<T>>(r.size)
+        for (val i in r.size) {
+            this.data.set_unchecked(i, r.get_unchecked(i) as T)
+        }
+    }
+
+    operator move() {
+        val r = Box<T>()
+        r.data = this.data
+        this.data = NullPtr<T>()
+        return r
+    }
+
+    operator delete() {
+        this.data.clear()
+    }
+}

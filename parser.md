@@ -52,6 +52,7 @@ LambdaExpr(
     body: Stmt[]
 )
 ScopeExpr(body: Stmt[])
+MoveExpr(expression: Expr)
 
 IdentifierTypeExpr(id: VariableExpr | PropertyExpr, arguments: TypeExpr[])
 OptionalTypeExpr(type: TypeExpr)
@@ -67,6 +68,7 @@ PropVisibilityFlags = 1 | 2 | 4 // public, protected, private
 ReturnStmt(value: Expr | NoneNode)
 BreakStmt()
 ContinueStmt()
+DeleteStmt(expression: Expr)
 ExpressionStmt(expression: Expr)
 ImportStmt(module: VariableExpr | PropertyExpr, alias: IdentifierToken | NoneNode)
 AliasStmt(id: IdentifierToken, type: TypeExpr)
